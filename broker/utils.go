@@ -324,6 +324,10 @@ func toNGSILDPayload(ctxElems []ContextElement, addAtContext bool) []map[string]
 
 			INFO.Println(meta.Type)
 
+			if (meta.Name == "") || (meta.Type == "") || (meta.Value == nil) {
+				continue
+			}
+
 			switch meta.Type {
 			case "point":
 				propertyValue["type"] = "GeoProperty"

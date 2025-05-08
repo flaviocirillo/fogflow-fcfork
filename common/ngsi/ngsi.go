@@ -5,10 +5,11 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"math"
 	"net/http"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -27,7 +28,7 @@ var (
 const NGSILD_CORE_CONTEXT = "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld"
 
 func LoggerIsEnabled(l *log.Logger) bool {
-	return (fmt.Sprintf("%T", l.Writer()) != "io.discard")
+	return l.Writer() != io.Discard
 }
 
 type SiteInfo struct {
@@ -424,6 +425,9 @@ func (ce *ContextElement) ReadFromNGSILD(ngsildEntity map[string]interface{}) bo
 			ce.Entity.ID = v.(string)
 		case "type":
 			ce.Entity.Type = v.(string)
+		case "@context":
+			continue
+			// TOFIX to handle better the @context
 		default:
 
 			switch value := v.(type) {
@@ -1538,7 +1542,7 @@ func (cfg *HTTPS) LoadConfig() bool {
 	}
 
 	// Create a CA certificate pool and add cert.pem to it
-	caCert, err2 := ioutil.ReadFile(cfg.CA)
+	caCert, err2 := os.ReadFile(cfg.CA)
 	if err2 != nil {
 		ERROR.Fatal(err2)
 		return false

@@ -602,7 +602,7 @@ func (tb *ThinBroker) sendReliableNotifyToSubscriber(elements []ContextElement, 
 
 		if err != nil {
 			if LoggerIsEnabled(DEBUG) {
-				DEBUG.Println("NOTIFY is not received by the subscriber, ", subscriberURL)
+				DEBUG.Println("NOTIFY is not received by the subscriber, ", subscriberURL, err)
 			}
 
 			tb.subscriptions_lock.Lock()
