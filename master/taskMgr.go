@@ -58,6 +58,7 @@ type InputEntity struct {
 	AttributeList    []string
 	Location         Point
 	InformationModel string
+	ProvisionMethod  string
 }
 
 type InputSubscription struct {
@@ -303,6 +304,7 @@ func (flow *FogFlow) expandExecutionPlan(entityID string, inputSubscription *Inp
 					inputEntity.Location = entity.Location
 					inputEntity.AttributeList = inputSubscription.InputSelector.SelectedAttributes
 					inputEntity.InformationModel = inputSubscription.InputSelector.InformationModel
+					inputEntity.ProvisionMethod = inputSubscription.InputSelector.ProvisionMethod
 
 					task.Inputs = append(task.Inputs, inputEntity)
 					if LoggerIsEnabled(DEBUG) {
@@ -316,6 +318,7 @@ func (flow *FogFlow) expandExecutionPlan(entityID string, inputSubscription *Inp
 					flowInfo.InputStream.Type = inputEntity.Type
 					flowInfo.InputStream.AttributeList = inputEntity.AttributeList
 					flowInfo.InputStream.InformationModel = inputEntity.InformationModel
+					flowInfo.InputStream.ProvisionMethod = inputEntity.ProvisionMethod
 
 					flowInfo.TaskInstanceID = task.TaskID
 					flowInfo.WorkerID = flow.DeploymentPlan[task.TaskID].WorkerID
@@ -431,6 +434,7 @@ func (flow *FogFlow) addNewTask(task *TaskConfig) *DeploymentAction {
 		instream.ID = inputEntity.ID
 		instream.AttributeList = inputEntity.AttributeList
 		instream.InformationModel = inputEntity.InformationModel
+		instream.ProvisionMethod = inputEntity.ProvisionMethod
 
 		taskInstance.Inputs = append(taskInstance.Inputs, instream)
 	}
@@ -734,6 +738,7 @@ func (flow *FogFlow) searchRelevantEntities(group *GroupInfo, updatedEntityID st
 				inputEntity.Location = entityRegistration.GetLocation()
 
 				inputEntity.InformationModel = selector.InformationModel
+				inputEntity.ProvisionMethod = selector.ProvisionMethod
 
 				if LoggerIsEnabled(DEBUG) {
 					DEBUG.Println("[inputEntity]: ", inputEntity)
@@ -815,47 +820,51 @@ func (tMgr *TaskMgr) handleTaskIntent(taskIntent *TaskIntent) {
 	// }
 }
 
-func (tMgr *TaskMgr) handleSynchronousTaskIntent(taskIntent *TaskIntent) {
-	INFO.Printf("[SYNC]orchestrating task intent: %+v", taskIntent)
+//
+// // At the moment this function is never used and it is exactly the same as the handleASynchronousTaskIntent() function
+//
 
-	fogflow := FogFlow{}
+// func (tMgr *TaskMgr) handleSynchronousTaskIntent(taskIntent *TaskIntent) {
+// 	INFO.Printf("[SYNC]orchestrating task intent: %+v", taskIntent)
 
-	fogflow.Init()
-	fogflow.Intent = taskIntent
+// 	fogflow := FogFlow{}
 
-	fID := taskIntent.TopologyName + "." + taskIntent.TaskObject.Name
+// 	fogflow.Init()
+// 	fogflow.Intent = taskIntent
 
-	task := taskIntent.TaskObject
+// 	fID := taskIntent.TopologyName + "." + taskIntent.TaskObject.Name
 
-	for _, inputStreamConfig := range task.InputStreams {
-		if LoggerIsEnabled(DEBUG) {
-			DEBUG.Println(inputStreamConfig)
-		}
-		subID := tMgr.selector2Subscription(&inputStreamConfig, taskIntent.GeoScope)
+// 	task := taskIntent.TaskObject
 
-		if subID == "" {
-			ERROR.Printf("failed to issue a subscription for this type of input, %+v\r\n", inputStreamConfig)
-			continue
-		}
+// 	for _, inputStreamConfig := range task.InputStreams {
+// 		if LoggerIsEnabled(DEBUG) {
+// 			DEBUG.Println(inputStreamConfig)
+// 		}
+// 		subID := tMgr.selector2Subscription(&inputStreamConfig, taskIntent.GeoScope)
 
-		subscription := InputSubscription{}
-		subscription.InputSelector = inputStreamConfig
-		subscription.SubID = subID
-		subscription.ReceivedEntityRegistrations = make(map[string]*EntityRegistration)
+// 		if subID == "" {
+// 			ERROR.Printf("failed to issue a subscription for this type of input, %+v\r\n", inputStreamConfig)
+// 			continue
+// 		}
 
-		fogflow.Subscriptions[subID] = &subscription
+// 		subscription := InputSubscription{}
+// 		subscription.InputSelector = inputStreamConfig
+// 		subscription.SubID = subID
+// 		subscription.ReceivedEntityRegistrations = make(map[string]*EntityRegistration)
 
-		// link this subscriptionId with the fog function name
-		tMgr.subID2FogFunc_lock.Lock()
-		tMgr.subID2FogFunc[subID] = fID
-		tMgr.subID2FogFunc_lock.Unlock()
-	}
+// 		fogflow.Subscriptions[subID] = &subscription
 
-	// add this fog function into the function map
-	tMgr.fogFlows_lock.Lock()
-	tMgr.fogFlows[fID] = &fogflow
-	tMgr.fogFlows_lock.Unlock()
-}
+// 		// link this subscriptionId with the fog function name
+// 		tMgr.subID2FogFunc_lock.Lock()
+// 		tMgr.subID2FogFunc[subID] = fID
+// 		tMgr.subID2FogFunc_lock.Unlock()
+// 	}
+
+// 	// add this fog function into the function map
+// 	tMgr.fogFlows_lock.Lock()
+// 	tMgr.fogFlows[fID] = &fogflow
+// 	tMgr.fogFlows_lock.Unlock()
+// }
 
 func (tMgr *TaskMgr) handleASynchronousTaskIntent(taskIntent *TaskIntent) {
 	INFO.Println("[Task Intent]: ", taskIntent)
@@ -1024,6 +1033,14 @@ func (tMgr *TaskMgr) HandleContextAvailabilityUpdate(subID string, entityAction 
 			operator := scheduledTaskInstance.OperatorName
 			workerID := scheduledTaskInstance.WorkerID
 			scheduledTaskInstance.DockerImage = tMgr.master.DetermineDockerImage(operator, workerID)
+			if scheduledTaskInstance.DockerImage == "" {
+				scheduledTaskInstance.PythonModule, scheduledTaskInstance.PythonPackage = tMgr.master.DeterminePythonPackage(operator)
+			}
+			if LoggerIsEnabled(DEBUG) {
+				DEBUG.Println("[scheduledTaskInstance.DockerImage]: ", scheduledTaskInstance.DockerImage)
+				DEBUG.Println("[scheduledTaskInstance.PythonModule]: ", scheduledTaskInstance.PythonModule)
+				DEBUG.Println("[scheduledTaskInstance.PythonPackage]: ", scheduledTaskInstance.PythonPackage)
+			}
 
 			// carry the paramemters associated with this operator
 			scheduledTaskInstance.Parameters = tMgr.master.GetOperatorParameters(operator)

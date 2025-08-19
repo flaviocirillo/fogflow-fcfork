@@ -126,7 +126,7 @@ $(function() {
 
         blocks.ready(function() {
             // associate functions to clickable buttons
-            $('#generateFunction').click(function() {
+            $('#generateFunction').click(function() { //This is Submit button
                 boardScene2FogFunction(blocks.export());
             });
             $('#cleanBoard').click(function() {
@@ -137,6 +137,122 @@ $(function() {
             });
         });
 
+        addEditorModifierDecorators(); //This add dynamic actions in the EntityStream popup configurator, for example show Parallelization option when EntityType is selected
+
+    }
+
+    function addEditorModifierDecorators() {// First watch for the modal being added
+        const bodyObserver = new MutationObserver(mutations => {
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType === Node.ELEMENT_NODE && node.classList.contains('blocks_js_modal')) {
+                        console.log("Blocks modal detected");
+                        // This blocks is the configurator of the entity stream
+
+                        // With this we validate the configurations to be valid
+                        validateEntityStreamConfigurator(node)
+
+                        //We this we add dynamicity to the configurator popup
+                        handleEntityStreamConfigurator(node);
+                    }
+                }
+            }
+        });
+
+        bodyObserver.observe(document.body, { childList: true, subtree: true });
+
+        function validateEntityStreamEntries(configuratorElement) {
+
+            console.log("Validing the EntityStream configuration")
+
+            const groupBy = configuratorElement.querySelector('select[name="groupby"]');
+            if (!groupBy) return; // Exit the function if not found because we are not in an EntityStream configuration
+
+            const parallelization = configuratorElement.querySelector('input[name="parallelization"]');
+            const numberofinstances = configuratorElement.querySelector('input[name="numberofinstances"]');
+            const parallelizationcriteria = configuratorElement.querySelector('select[name="parallelizationcriteria"]');
+
+            if (groupBy.value !== "EntityType"){
+                console.log("Validing the EntityStream configuration since groupBy is not EntityType")
+                parallelization.checked = false
+                numberofinstances.value = 1
+                parallelizationcriteria.value = 'NA'
+            } else {
+                if (!parallelization.checked){
+                    numberofinstances.value = 1
+                    parallelizationcriteria.value = 'NA'
+                }
+
+            }
+        }   
+
+        function validateEntityStreamConfigurator(node) {
+            const saveBtn = node.querySelector("button.save");
+
+            if (saveBtn) {
+                saveBtn.addEventListener("click", () => {
+                    validateEntityStreamEntries(node);
+                },true// <- capture phase, before the other listener
+            );
+            }
+        }
+
+
+        function toggleHidingField(configuratorElement, fieldSelector, triggerSelector, valueTrigger) {
+            const fieldToToggle = configuratorElement.querySelector(fieldSelector);
+            const triggerField = configuratorElement.querySelector(triggerSelector);
+
+            if (fieldToToggle && triggerField) {
+                // Find label text (two siblings before field) and the <br> nodes before/after
+                const labelTextNode = fieldToToggle.previousSibling.previousSibling;
+                const brBefore = labelTextNode?.previousSibling?.nodeName === "BR" ? labelTextNode.previousSibling : null;
+                const brAfter = fieldToToggle.previousSibling?.nodeName === "BR" ? fieldToToggle.previousSibling : null;
+
+                // Create wrapper div
+                const wrapper = document.createElement("div");
+
+                // Insert wrapper in place of first element (brBefore if exists, else labelTextNode)
+                const insertBeforeNode = brBefore || labelTextNode;
+                fieldToToggle.parentNode.insertBefore(wrapper, insertBeforeNode);
+
+                // Move the elements inside the wrapper
+                if (brBefore) brBefore.remove()
+                if (labelTextNode) wrapper.appendChild(labelTextNode);
+                if (brAfter) wrapper.appendChild(brAfter);
+                wrapper.appendChild(fieldToToggle);
+
+                // Hide by default
+                wrapper.style.display = "none";
+
+                // Listen for changes on trigger field
+                triggerField.addEventListener('change', () => {
+                    let match;
+                    if (typeof valueTrigger === "boolean") {
+                        // For checkboxes
+                        match = (triggerField.checked === valueTrigger);
+                    } else {
+                        // For selects or text inputs
+                        match = (triggerField.value === valueTrigger);
+                    }
+                    wrapper.style.display = match ? "" : "none";
+                });
+            }
+        }
+
+        function handleEntityStreamConfigurator(configuratorElement) {
+
+            const groupBy = configuratorElement.querySelector('select[name="groupby"]');
+            if (!groupBy) return; // Exit the function if not found because we are not in an EntityStream configuration
+
+            // show the configuration of parallelization only when the parallelization check is checked
+            toggleHidingField(configuratorElement,'input[name="numberofinstances"]', 'input[name="parallelization"]', true)
+            toggleHidingField(configuratorElement,'select[name="parallelizationcriteria"]', 'input[name="parallelization"]', true)
+
+            // hide the configuration of the parallelization part when groupBy is not EntityType
+            toggleHidingField(configuratorElement,'input[name="parallelization"]', 'select[name="groupby"]', "EntityType")
+            toggleHidingField(configuratorElement,'input[name="numberofinstances"]', 'select[name="groupby"]', "EntityType")
+            toggleHidingField(configuratorElement,'select[name="parallelizationcriteria"]', 'select[name="groupby"]', "EntityType")
+        }
     }
 
     function openFogFunctionEditor(fogfunction) {

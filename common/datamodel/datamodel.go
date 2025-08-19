@@ -100,11 +100,15 @@ type TaskIntent struct {
 }
 
 type InputStreamConfig struct {
-	EntityType         string   `json:"selected_type"`
-	SelectedAttributes []string `json:"selected_attributes"`
-	GroupBy            string   `json:"groupby"`
-	Scoped             bool     `json:"scoped"`
-	InformationModel   string   `json:"information_model"`
+	EntityType              string   `json:"selected_type"`
+	SelectedAttributes      []string `json:"selected_attributes"`
+	GroupBy                 string   `json:"groupby"`
+	Parallelization         bool     `json:"parallelization"`
+	Numberofinstances       int      `json:"numberofinstances"`
+	ParallelizationCriteria string   `json:"parallelizationcriteria"`
+	Scoped                  bool     `json:"scoped"`
+	InformationModel        string   `json:"information_model"`
+	ProvisionMethod         string   `json:"provisionmethod"`
 }
 
 // This is to state that we do not need to save all registrations if the subscription is simply by type
@@ -126,10 +130,11 @@ type Parameter struct {
 }
 
 type Operator struct {
-	Name         string        `json:"name"`
-	Description  string        `json:"description"`
-	Parameters   []Parameter   `json:"parameters"`
-	DockerImages []DockerImage `json:"dockerimages"`
+	Name          string        `json:"name"`
+	Description   string        `json:"description"`
+	Parameters    []Parameter   `json:"parameters"`
+	DockerImages  []DockerImage `json:"dockerimages"`
+	PythonPackage PythonPackage `json:"pythonpackage"`
 }
 
 type Task struct {
@@ -194,11 +199,19 @@ type DockerImage struct {
 	Prefetched     bool   `json:"prefetched"`
 }
 
+type PythonPackage struct {
+	ModuleName    string `json:"moduleName"`
+	ModuleVersion string `json:"moduleVersion"`
+	Package       string `json:"package"`
+	Prefetched    bool   `json:"prefetched"`
+}
+
 type InputStream struct {
 	Type             string
 	ID               string
 	AttributeList    []string
 	InformationModel string
+	ProvisionMethod  string
 }
 
 func (myInputStream *InputStream) Equal(otherInputStream *InputStream) bool {
@@ -265,10 +278,12 @@ type ScheduledTaskInstance struct {
 
 	OperatorName string
 
-	TaskType     string
-	FunctionCode string
-	DockerImage  string
-	Parameters   []Parameter
+	TaskType      string
+	FunctionCode  string
+	DockerImage   string
+	PythonModule  string // This is the zip file comprising of the moduleName-version.zip
+	PythonPackage string // this is the path to the python code in the zip file
+	Parameters    []Parameter
 
 	WorkerID string
 

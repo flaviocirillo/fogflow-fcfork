@@ -131,7 +131,7 @@ func (dockerengine *DockerEngine) findFreePortNumber() int {
 }
 
 // functionCode string, taskID string, adminCfg []interface{}, servicePorts []string)
-func (dockerengine *DockerEngine) StartTask(task *ScheduledTaskInstance, brokerURL string) (string, string, error) {
+func (dockerengine *DockerEngine) StartTask(task *ScheduledTaskInstance, brokerURL string, commands []interface{}) (string, string, error) {
 	dockerImage := task.DockerImage
 	INFO.Println("to execute Task [", task.ID, "] to perform Operation [",
 		dockerImage, "] with parameters [", task.Parameters, "]")
@@ -152,20 +152,20 @@ func (dockerengine *DockerEngine) StartTask(task *ScheduledTaskInstance, brokerU
 	// find a free listening port number available on the host machine
 	freePort := strconv.Itoa(dockerengine.findFreePortNumber())
 
-	// configure the task with its output streams via its admin interface
-	commands := make([]interface{}, 0)
+	// // configure the task with its output streams via its admin interface
+	// commands := make([]interface{}, 0)
 
-	// set broker URL
-	setBrokerCmd := make(map[string]interface{})
-	setBrokerCmd["command"] = "CONNECT_BROKER"
-	setBrokerCmd["brokerURL"] = brokerURL
-	commands = append(commands, setBrokerCmd)
+	// // set broker URL
+	// setBrokerCmd := make(map[string]interface{})
+	// setBrokerCmd["command"] = "CONNECT_BROKER"
+	// setBrokerCmd["brokerURL"] = brokerURL
+	// commands = append(commands, setBrokerCmd)
 
-	// set CorrelatorID
-	setCorrelatorCmd := make(map[string]interface{})
-	setCorrelatorCmd["command"] = "SET_CORRELATORID"
-	setCorrelatorCmd["correlatorID"] = task.ID
-	commands = append(commands, setCorrelatorCmd)
+	// // set CorrelatorID
+	// setCorrelatorCmd := make(map[string]interface{})
+	// setCorrelatorCmd["command"] = "SET_CORRELATORID"
+	// setCorrelatorCmd["correlatorID"] = task.ID
+	// commands = append(commands, setCorrelatorCmd)
 
 	// pass the reference URL to the task so that the task can issue context subscription as well
 	setReferenceCmd := make(map[string]interface{})
@@ -173,14 +173,14 @@ func (dockerengine *DockerEngine) StartTask(task *ScheduledTaskInstance, brokerU
 	setReferenceCmd["url"] = "http://" + dockerengine.workerCfg.InternalIP + ":" + freePort
 	commands = append(commands, setReferenceCmd)
 
-	// set output stream
-	for _, outStream := range task.Outputs {
-		setOutputCmd := make(map[string]interface{})
-		setOutputCmd["command"] = "SET_OUTPUTS"
-		setOutputCmd["type"] = outStream.Type
-		setOutputCmd["id"] = outStream.StreamID
-		commands = append(commands, setOutputCmd)
-	}
+	// // set output stream
+	// for _, outStream := range task.Outputs {
+	// 	setOutputCmd := make(map[string]interface{})
+	// 	setOutputCmd["command"] = "SET_OUTPUTS"
+	// 	setOutputCmd["type"] = outStream.Type
+	// 	setOutputCmd["id"] = outStream.StreamID
+	// 	commands = append(commands, setOutputCmd)
+	// }
 
 	hostConfig := docker.HostConfig{}
 
@@ -218,11 +218,11 @@ func (dockerengine *DockerEngine) StartTask(task *ScheduledTaskInstance, brokerU
 			// DEBUG.Printf("hostConfig: %v", hostConfig)
 		}
 
-		// If notthing of the above let pass it as it is
-		setParameterCmd := make(map[string]interface{})
-		setParameterCmd["name"] = parameter.Name
-		setParameterCmd["value"] = parameter.Value
-		commands = append(commands, setParameterCmd)
+		// // If notthing of the above let pass it as it is
+		// setParameterCmd := make(map[string]interface{})
+		// setParameterCmd["name"] = parameter.Name
+		// setParameterCmd["value"] = parameter.Value
+		// commands = append(commands, setParameterCmd)
 
 	}
 

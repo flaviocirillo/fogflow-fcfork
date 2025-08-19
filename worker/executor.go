@@ -57,6 +57,8 @@ func (e *Executor) Init(cfg *Config, selectedBrokerURL string, pWorker *Worker) 
 		e.client = &Kubernetes{}
 	} else if strings.EqualFold(cfg.Worker.ContainerManagement, "mec") {
 		e.client = &EdgeController{}
+	} else if strings.EqualFold(cfg.Worker.ContainerManagement, "airflow") {
+		e.client = &AirflowEngine{}
 	} else {
 		e.client = &DockerEngine{}
 	}
@@ -97,8 +99,10 @@ func (e *Executor) LaunchTask(task *ScheduledTaskInstance) bool {
 		taskCtx.OutputStreams = append(taskCtx.OutputStreams, eid)
 	}
 
+	taskCommands := e.generateTaskCommandsList(task, e.brokerURL)
+
 	// start a container to run the scheduled task instance
-	containerId, refURL, err := e.client.StartTask(task, e.brokerURL)
+	containerId, refURL, err := e.client.StartTask(task, e.brokerURL, taskCommands)
 	if err != nil {
 		ERROR.Println(err)
 		return false
@@ -129,15 +133,19 @@ func (e *Executor) LaunchTask(task *ScheduledTaskInstance) bool {
 	taskCtx.Subscriptions = make([]string, 0)
 
 	for _, inputStream := range task.Inputs {
-		subID, err := e.subscribeInputStream(refURL, task.ID, &inputStream)
-		if err == nil {
-			if LoggerIsEnabled(DEBUG) {
-				DEBUG.Println("===========subID = ", subID)
+		INFO.Printf("ProvisionMethod: %s", inputStream.ProvisionMethod)
+		INFO.Printf("InformationModel: %s", inputStream.InformationModel)
+		if inputStream.ProvisionMethod == "Pub-Sub" {
+			subID, err := e.subscribeInputStream(refURL, task.ID, &inputStream)
+			if err == nil {
+				if LoggerIsEnabled(DEBUG) {
+					DEBUG.Println("===========subID = ", subID)
+				}
+				taskCtx.Subscriptions = append(taskCtx.Subscriptions, subID)
+				taskCtx.EntityID2SubID[inputStream.ID] = subID
+			} else {
+				ERROR.Println(err)
 			}
-			taskCtx.Subscriptions = append(taskCtx.Subscriptions, subID)
-			taskCtx.EntityID2SubID[inputStream.ID] = subID
-		} else {
-			ERROR.Println(err)
 		}
 	}
 
@@ -474,4 +482,51 @@ func (e *Executor) onRemoveInput(flow *FlowInfo) {
 	}
 
 	delete(taskCtx.EntityID2SubID, flow.InputStream.ID)
+}
+
+func (e *Executor) generateTaskCommandsList(task *ScheduledTaskInstance, brokerURL string) []interface{} {
+
+	// configure the task with its output streams via its admin interface
+	commands := make([]interface{}, 0)
+
+	// set broker URL
+	setBrokerCmd := make(map[string]interface{})
+	setBrokerCmd["command"] = "CONNECT_BROKER"
+	setBrokerCmd["brokerURL"] = brokerURL
+	commands = append(commands, setBrokerCmd)
+
+	// set CorrelatorID
+	setCorrelatorCmd := make(map[string]interface{})
+	setCorrelatorCmd["command"] = "SET_CORRELATORID"
+	setCorrelatorCmd["correlatorID"] = task.ID
+	commands = append(commands, setCorrelatorCmd)
+
+	// set input stream
+	for _, inputStream := range task.Inputs {
+		setInputCmd := make(map[string]interface{})
+		setInputCmd["command"] = "SET_INPUTS"
+		setInputCmd["type"] = inputStream.Type
+		setInputCmd["id"] = inputStream.ID
+		setInputCmd["attributes"] = inputStream.AttributeList
+		commands = append(commands, setInputCmd)
+	}
+
+	// set output stream
+	for _, outStream := range task.Outputs {
+		setOutputCmd := make(map[string]interface{})
+		setOutputCmd["command"] = "SET_OUTPUTS"
+		setOutputCmd["type"] = outStream.Type
+		setOutputCmd["id"] = outStream.StreamID
+		commands = append(commands, setOutputCmd)
+	}
+
+	for _, parameter := range task.Parameters {
+
+		setParameterCmd := make(map[string]interface{})
+		setParameterCmd["name"] = parameter.Name
+		setParameterCmd["value"] = parameter.Value
+		commands = append(commands, setParameterCmd)
+
+	}
+	return commands
 }

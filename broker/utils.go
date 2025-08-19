@@ -17,6 +17,10 @@ func postNotifyContext(ctxElems []ContextElement, subscriptionId string, URL str
 	//INFO.Println("destination protocol: ", DestinationBrokerType)
 	// INFO.Println("ctxElems: ", ctxElems)
 
+	if LoggerIsEnabled(DEBUG) {
+		DEBUG.Println("NotifyContext ctxElems: ", ctxElems, " subscriptionId: ", subscriptionId, " URL: ", URL, " ConsumerNGSIVersion: ", ConsumerNGSIVersion, " tenant: ", tenant)
+	}
+
 	switch ConsumerNGSIVersion {
 	case "NGSI-LD":
 		return postNGSILDUpsert(ctxElems, URL, tenant)
@@ -41,6 +45,10 @@ func postNGSIV1NotifyContext(ctxElems []ContextElement, subscriptionId string, U
 	body, err := json.Marshal(notifyCtxReq)
 	if err != nil {
 		return err
+	}
+
+	if LoggerIsEnabled(DEBUG) {
+		DEBUG.Printf("body %+v", string(body))
 	}
 
 	req, _ := http.NewRequest("POST", URL+"/notifyContext", bytes.NewBuffer(body))
@@ -240,7 +248,7 @@ func toNGSILDPayload(ctxElems []ContextElement, addAtContext bool) []map[string]
 		if strings.HasPrefix(elem.Entity.ID, "urn:") || strings.HasPrefix(elem.Entity.ID, "URN:") {
 			elementLD["id"] = elem.Entity.ID
 		} else {
-			elementLD["id"] = "urn:" + elem.Entity.ID
+			elementLD["id"] = "urn:ngsi-ld:" + elem.Entity.ID
 		}
 
 		elementLD["type"] = elem.Entity.Type
@@ -422,7 +430,7 @@ func subscribeContextProviderNGSILD(sub *SubscribeContextRequest, ProviderURL st
 
 	body, err := json.Marshal(subscribeContextProviderNGSILD)
 	if LoggerIsEnabled(DEBUG) {
-		DEBUG.Println("body ", string(body), "| err ", err)
+		DEBUG.Println("url:", ProviderURL+"/ngsi-ld/v1/subscriptions", ", body: ", string(body), "| err ", err)
 	}
 	if err != nil {
 		return "", err

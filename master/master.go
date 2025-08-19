@@ -647,6 +647,20 @@ func (master *Master) DetermineDockerImage(operatorName string, wID string) stri
 	return selectedDockerImageName
 }
 
+// to select the right docker image of an operator for the selected worker
+func (master *Master) DeterminePythonPackage(operatorName string) (string, string) {
+
+	master.operatorList_lock.RLock()
+	defer master.operatorList_lock.RUnlock()
+
+	operator := master.operatorList[operatorName]
+
+	selectedPythonModule := operator.PythonPackage.ModuleName + "-" + operator.PythonPackage.ModuleVersion
+	selectedPythonPackage := operator.PythonPackage.Package
+
+	return selectedPythonModule, selectedPythonPackage
+}
+
 func (master *Master) GetOperatorParameters(operatorName string) []Parameter {
 	master.operatorList_lock.RLock()
 

@@ -10,6 +10,6 @@ import (
 type Engine interface {
 	Init(cfg *Config) bool
 	PullImage(dockerImage string) (string, error)
-	StartTask(task *ScheduledTaskInstance, brokerURL string) (string, string, error)
+	StartTask(task *ScheduledTaskInstance, brokerURL string, taskCommands []interface{}) (string, string, error)
 	StopTask(ContainerID string)
 }

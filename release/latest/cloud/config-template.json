@@ -31,7 +31,8 @@
         "capacity": 8,
         "heartbeat_interval": 30,
         "detection_duration": 10,
-        "infinite_reconnection_tries": true
+        "infinite_reconnection_tries": true,
+        "container_management" : "docker"    
     },
     "designer": {
         "webSrvPort": 8080,

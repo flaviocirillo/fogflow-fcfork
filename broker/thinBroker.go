@@ -3,6 +3,7 @@ package main
 import (
 	"strings"
 	"sync"
+	"time"
 
 	. "fogflow/common/config"
 	. "fogflow/common/datamodel"
@@ -96,6 +97,9 @@ func (tb *ThinBroker) OnTimer() { // for every 2 second
 
 		if hasCachedNotification {
 			elements := make([]ContextElement, 0)
+			if LoggerIsEnabled(DEBUG) {
+				DEBUG.Println("elements", elements, "sid", sid)
+			}
 			tb.sendReliableNotify(elements, sid)
 		}
 	}
@@ -416,6 +420,9 @@ func (tb *ThinBroker) UpdateContext2LocalSite(ctxElem *ContextElement, correlato
 		DEBUG.Println("after updating ctxElem: ", ctxElem)
 	}
 
+	if LoggerIsEnabled(DEBUG) {
+		DEBUG.Println("correlator", correlator, "check ctxElement", ctxElem)
+	}
 	// propogate this update to its subscribers
 	tb.notifySubscribers(ctxElem, correlator, true)
 }
@@ -453,7 +460,7 @@ func (tb *ThinBroker) notifySubscribers(ctxElem *ContextElement, correlator stri
 
 		if isProsumerSubscription(correlator, sid) {
 			if LoggerIsEnabled(DEBUG) {
-				DEBUG.Println("notification comes from the prosumer, thus I avoid to notify back the prosumer, sid", sid, ", correlator ", correlator)
+				DEBUG.Println("notification comes from the prosumer, thus I avoid to notify back the prosumer, sid", sid, ", correlator ", correlator, ", eid", eid)
 			}
 			continue
 		}
@@ -542,6 +549,9 @@ func (tb *ThinBroker) notifyOneSubscriberWithCurrentStatus(entities []EntityId, 
 		}
 	}
 	tb.entities_lock.Unlock()
+	if LoggerIsEnabled(DEBUG) {
+		DEBUG.Println("elements", elements, "sid", sid)
+	}
 	go tb.sendReliableNotify(elements, sid)
 }
 
@@ -557,6 +567,9 @@ func (tb *ThinBroker) notifyOneSubscriberWithCurrentStatusOfV1(entities []Entity
 		}
 	}
 	tb.entities_lock.Unlock()
+	if LoggerIsEnabled(DEBUG) {
+		DEBUG.Println("elements", elements, "sid", sid)
+	}
 	go tb.sendReliableNotify(elements, sid)
 }
 
@@ -565,6 +578,12 @@ func (tb *ThinBroker) notifyOneSubscriberWithCurrentStatusOfV1(entities []Entity
 */
 
 func (tb *ThinBroker) sendReliableNotifyToSubscriber(elements []ContextElement, sid string) {
+	if len(elements) == 0 {
+		if LoggerIsEnabled(DEBUG) {
+			DEBUG.Println("elements list is empty", elements, "sid", sid)
+		}
+		return
+	}
 	if LoggerIsEnabled(DEBUG) {
 		DEBUG.Println("elements", elements, "sid", sid)
 	}
@@ -593,12 +612,28 @@ func (tb *ThinBroker) sendReliableNotifyToSubscriber(elements []ContextElement, 
 	// DEBUG.Println(elements)
 
 	if LoggerIsEnabled(DEBUG) {
-		DEBUG.Println("elements:", elements, "sid:", sid, "subscriberURL:", subscriberURL, "DestinationBroker:", notifyVersion, "Tenant,", Tenant)
+		DEBUG.Println("elements:", elements, "sid:", sid, "subscriberURL:", subscriberURL, "DestinationBroker:", notifyVersion, ", Tenant:", Tenant)
 	}
 
 	if len(elements) > 0 {
 
 		err := postNotifyContext(elements, sid, subscriberURL, notifyVersion, Tenant, tb.SecurityCfg)
+
+		if err != nil {
+			if LoggerIsEnabled(DEBUG) {
+				DEBUG.Println("NOTIFY is not received by the subscriber, trying again in 5 seconds:", subscriberURL, err)
+			}
+
+			// Wait 5 seconds before retrying
+			time.Sleep(5 * time.Second)
+
+			//UNCOMMENTME
+			// Retry once
+			err = postNotifyContext(elements, sid, subscriberURL, notifyVersion, Tenant, tb.SecurityCfg)
+			if err != nil && LoggerIsEnabled(DEBUG) {
+				DEBUG.Println("Retry failed for NOTIFY to subscriber:", subscriberURL, err)
+			}
+		}
 
 		if err != nil {
 			if LoggerIsEnabled(DEBUG) {

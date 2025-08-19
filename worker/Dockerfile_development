@@ -1,4 +1,5 @@
 FROM scratch
+ADD airflow_dag_template.py	/
 ADD worker	/
 CMD ["/worker"]
 

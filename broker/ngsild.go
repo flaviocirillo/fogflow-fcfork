@@ -139,6 +139,8 @@ func (tb *ThinBroker) NGSILD_QueryById(w rest.ResponseWriter, r *rest.Request) {
 
 func (tb *ThinBroker) NGSILD_QueryByParameters(w rest.ResponseWriter, r *rest.Request) {
 
+	// "?type=None&limit=0&count=true"
+	w.WriteHeader(200)
 }
 
 // ============= subscribe and notify ====================

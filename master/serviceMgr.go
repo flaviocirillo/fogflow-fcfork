@@ -53,9 +53,7 @@ func (sMgr *ServiceMgr) updateServiceIntentStatus(eid string, status string, rea
 	}
 }
 
-//
 // to break down the service intent from the service level into the task level
-//
 func (sMgr *ServiceMgr) handleServiceIntent(serviceIntent *ServiceIntent) {
 	INFO.Println("[Service Intent]: ", serviceIntent.TopologyName)
 
@@ -63,16 +61,14 @@ func (sMgr *ServiceMgr) handleServiceIntent(serviceIntent *ServiceIntent) {
 	_, existFlag := sMgr.serviceIntentMap[serviceIntent.ID]
 	sMgr.intentList_lock.Unlock()
 
-	if existFlag == true {
+	if existFlag {
 		sMgr.updateExistingServiceIntent(serviceIntent)
 	} else {
 		sMgr.createNewServiceIntent(serviceIntent)
 	}
 }
 
-//
 // to break down the service intent from the service level into the task level
-//
 func (sMgr *ServiceMgr) updateExistingServiceIntent(serviceIntent *ServiceIntent) {
 	INFO.Println("updating an existing intent")
 
@@ -118,9 +114,7 @@ func (sMgr *ServiceMgr) updateExistingServiceIntent(serviceIntent *ServiceIntent
 	sMgr.serviceIntentMap[serviceIntent.ID] = serviceIntent
 }
 
-//
 // to break down the service intent from the service level into the task level
-//
 func (sMgr *ServiceMgr) createNewServiceIntent(serviceIntent *ServiceIntent) {
 	var topologyObject = sMgr.master.getTopologyByName(serviceIntent.TopologyName)
 	if topologyObject == nil {

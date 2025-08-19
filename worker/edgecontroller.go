@@ -52,26 +52,26 @@ func (mec *EdgeController) findFreePortNumber() int {
 	return l.Addr().(*net.TCPAddr).Port
 }
 
-func (mec *EdgeController) StartTask(task *ScheduledTaskInstance, brokerURL string) (string, string, error) {
+func (mec *EdgeController) StartTask(task *ScheduledTaskInstance, brokerURL string, commands []interface{}) (string, string, error) {
 	dockerImage := task.DockerImage
 
 	// find a free listening port number available on the host machine
 	freePort := strconv.Itoa(mec.findFreePortNumber())
 
-	// configure the task with its output streams via its admin interface
-	commands := make([]interface{}, 0)
+	// // configure the task with its output streams via its admin interface
+	// commands := make([]interface{}, 0)
 
-	// set broker URL
-	setBrokerCmd := make(map[string]interface{})
-	setBrokerCmd["command"] = "CONNECT_BROKER"
-	setBrokerCmd["brokerURL"] = brokerURL
-	commands = append(commands, setBrokerCmd)
+	// // set broker URL
+	// setBrokerCmd := make(map[string]interface{})
+	// setBrokerCmd["command"] = "CONNECT_BROKER"
+	// setBrokerCmd["brokerURL"] = brokerURL
+	// commands = append(commands, setBrokerCmd)
 
-	// set CorrelatorID
-	setCorrelatorCmd := make(map[string]interface{})
-	setCorrelatorCmd["command"] = "SET_CORRELATORID"
-	setCorrelatorCmd["correlatorID"] = task.ID
-	commands = append(commands, setCorrelatorCmd)
+	// // set CorrelatorID
+	// setCorrelatorCmd := make(map[string]interface{})
+	// setCorrelatorCmd["command"] = "SET_CORRELATORID"
+	// setCorrelatorCmd["correlatorID"] = task.ID
+	// commands = append(commands, setCorrelatorCmd)
 
 	// pass the reference URL to the task so that the task can issue context subscription as well
 	setReferenceCmd := make(map[string]interface{})
@@ -79,14 +79,14 @@ func (mec *EdgeController) StartTask(task *ScheduledTaskInstance, brokerURL stri
 	setReferenceCmd["url"] = "http://fogflow-deployment-" + freePort + ":" + freePort
 	commands = append(commands, setReferenceCmd)
 
-	// set output stream
-	for _, outStream := range task.Outputs {
-		setOutputCmd := make(map[string]interface{})
-		setOutputCmd["command"] = "SET_OUTPUTS"
-		setOutputCmd["type"] = outStream.Type
-		setOutputCmd["id"] = outStream.StreamID
-		commands = append(commands, setOutputCmd)
-	}
+	// // set output stream
+	// for _, outStream := range task.Outputs {
+	// 	setOutputCmd := make(map[string]interface{})
+	// 	setOutputCmd["command"] = "SET_OUTPUTS"
+	// 	setOutputCmd["type"] = outStream.Type
+	// 	setOutputCmd["id"] = outStream.StreamID
+	// 	commands = append(commands, setOutputCmd)
+	// }
 
 	jsonString, _ := json.Marshal(commands)
 

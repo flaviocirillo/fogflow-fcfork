@@ -4,6 +4,72 @@ function registerAllBlocks(blocks, operators, dtypes) {
     console.log("operator list: ", operators);
 
     blocks.register({
+        name: "EntityStream",
+        description: "To define an entity stream",
+        fields: [
+            {
+                name: "InformationModel",
+                choices: ["NGSIv1", "NGSI-LD"],
+                defaultValue: "NGSI-LD",
+                attrs: "editable"
+            },
+            {
+                name: "ProvisionMethod",
+                choices: ["Pub-Sub", "Batch", "None"],
+                defaultValue: "Pub-Sub",
+                attrs: "editable"
+            },
+            {
+                name: "SelectedType",
+                type: "string",
+//                choices: dtypes,                
+                attrs: "editable"
+            },
+            {
+                name: "SelectedAttributes",
+                type: "string[]",
+                defaultValue: ["all"],
+                attrs: "editable"
+            },
+            {
+                name: "Groupby",
+                choices: ["ALL", "EntityID", "EntityType", "EntityAttribute"],
+                defaultValue: "EntityID",
+                attrs: "editable"
+            },
+            {
+                name: "Parallelization",
+                type: "bool",
+                defaultValue: false,
+                attrs: "editable"
+            },
+            {
+                name: "NumberOfInstances",
+                type: "string",
+                defaultValue: "1",
+                attrs: "editable"
+            },
+            {
+                name: "ParallelizationCriteria",
+                choices: ["GeoScope", "Random", 'NA'],
+                defaultValue: "NA",
+                attrs: "editable"
+            },
+            {
+                name: "Scoped",
+                type: "bool",
+                defaultValue: false,
+                attrs: "editable"
+            },
+            {
+                name: "Stream",
+                attrs: "output",
+                type: "Stream"
+            }
+        ]
+    });
+
+    blocks.register({
         name: "Task",
         description: "To specify a data processing task",
         fields: [
@@ -38,47 +104,7 @@ function registerAllBlocks(blocks, operators, dtypes) {
     });
 
 
-    blocks.register({
-        name: "EntityStream",
-        description: "To define an entity stream",
-        fields: [
-            {
-                name: "InformationModel",
-                choices: ["NGSIv1", "NGSI-LD"],
-                defaultValue: "NGSI-LD",
-                attrs: "editable"
-            },
-            {
-                name: "SelectedType",
-                type: "string",
-//                choices: dtypes,                
-                attrs: "editable"
-            },
-            {
-                name: "SelectedAttributes",
-                type: "string[]",
-                defaultValue: ["all"],
-                attrs: "editable"
-            },
-            {
-                name: "Groupby",
-                choices: ["ALL", "EntityID", "EntityType", "EntityAttribute"],
-                defaultValue: "EntityID",
-                attrs: "editable"
-            },
-            {
-                name: "Scoped",
-                type: "bool",
-                defaultValue: false,
-                attrs: "editable"
-            },
-            {
-                name: "Stream",
-                attrs: "output",
-                type: "Stream"
-            }
-        ]
-    });
+    
 
 }
 
