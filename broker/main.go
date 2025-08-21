@@ -39,7 +39,7 @@ func main() {
 		if err != nil {
 			ERROR.Println(err)
 		} else {
-			INFO.Println(resp.StatusCode)
+			INFO.Println("Response code from IoT Discovery at " + config.GetDiscoveryURL() + "/status request: ", + resp.StatusCode)
 		}
 
 		if err == nil && resp.StatusCode == 200 {

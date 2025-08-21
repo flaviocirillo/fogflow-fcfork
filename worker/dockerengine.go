@@ -56,7 +56,7 @@ func (dockerengine *DockerEngine) Init(cfg *Config) bool {
 	return true
 }
 
-func (dockerengine *DockerEngine) PullImage(dockerImage string) (string, error) {
+func (dockerengine *DockerEngine) PullImage(dockerImage string , ephemeralId ...string) (string, error) {
 	auth := docker.AuthConfiguration{}
 
 	if dockerengine.workerCfg.Worker.Registry.IsConfigured() {

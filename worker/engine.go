@@ -9,7 +9,7 @@ import (
 // such as docker-engine, kubernetes, and MEC controller
 type Engine interface {
 	Init(cfg *Config) bool
-	PullImage(dockerImage string) (string, error)
+	PullImage(dockerImage string, ephemeralId ...string) (string, error)
 	StartTask(task *ScheduledTaskInstance, brokerURL string, taskCommands []interface{}) (string, string, error)
 	StopTask(ContainerID string)
 }

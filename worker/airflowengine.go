@@ -1,7 +1,6 @@
 package main
 
 import (
-	"archive/zip"
 	"bufio"
 	"encoding/json"
 	"fmt"
@@ -33,12 +32,13 @@ func (airflowengine *AirflowEngine) Init(cfg *Config) bool {
 	return true
 }
 
-func (airflowengine *AirflowEngine) generateDAG(pythonModule string, pythonPackage string, configuration string) {
+func (airflowengine *AirflowEngine) generateDAG(pythonModule string, pythonPackage string, taskId string, configuration string) {
 
-	importModule := fmt.Sprintf("sys.path.insert(0, '%s.zip')", pythonModule)
+	// importModule := fmt.Sprintf("sys.path.insert(0, '%s.zip')", pythonModule)
+	// importModule := fmt.Sprintf("import %s", pythonModule)
 
 	// importPath := strings.ReplaceAll(pythonPackage, "/", ".")
-	importLine := fmt.Sprintf("from %s import handleEntity", pythonPackage)
+	importLine := fmt.Sprintf("from %s.%s import handleEntity", airflowengine.getLibFolderName(pythonModule, taskId), pythonPackage)
 
 	configurationLine := fmt.Sprintf("configurations = %s", configuration)
 
@@ -57,9 +57,9 @@ func (airflowengine *AirflowEngine) generateDAG(pythonModule string, pythonPacka
 		line := scanner.Text()
 		lines = append(lines, line)
 
-		if strings.Contains(line, "MODULE PLACEHOLDER:") {
-			lines = append(lines, importModule)
-		}
+		// if strings.Contains(line, "MODULE PLACEHOLDER:") {
+		// 	lines = append(lines, importModule)
+		// }
 
 		if strings.Contains(line, "FOGFUNCTION PLACEHOLDER:") {
 			lines = append(lines, importLine)
@@ -75,7 +75,7 @@ func (airflowengine *AirflowEngine) generateDAG(pythonModule string, pythonPacka
 		os.Exit(1)
 	}
 
-	dagName := fmt.Sprintf("%s_%s_dag.py", pythonModule, pythonPackage)
+	dagName := fmt.Sprintf("%s_%s_%s_dag.py", pythonModule, pythonPackage, airflowengine.getModuleName(pythonModule, taskId))
 	// Write back the modified content
 	outputFile, err := os.Create(airflowengine.airflowHome + dagName)
 	if err != nil {
@@ -96,88 +96,171 @@ func (airflowengine *AirflowEngine) generateDAG(pythonModule string, pythonPacka
 
 }
 
-func (airflowengine *AirflowEngine) importModule(moduleName string) error {
+// func addFileToZip(zipWriter *zip.Writer, path string, baseInZip string) error {
+// 	info, err := os.Stat(path)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	localRepo := airflowengine.localPyModuleRepository
-	remoteRepo := airflowengine.remotePyModuleRepository
-	destDir := airflowengine.airflowHome
+// 	if info.IsDir() {
+// 		entries, err := os.ReadDir(path)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		for _, entry := range entries {
+// 			entryPath := filepath.Join(path, entry.Name())
+// 			entryBase := filepath.Join(baseInZip, entry.Name())
+// 			if err := addFileToZip(zipWriter, entryPath, entryBase); err != nil {
+// 				return err
+// 			}
+// 		}
+// 	} else {
+// 		fileToZip, err := os.Open(path)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		defer fileToZip.Close()
 
-	folderPath := filepath.Join(localRepo, moduleName)
-	zipName := moduleName + ".zip"
-	zipPath := filepath.Join(localRepo, zipName)
-	destZipPath := filepath.Join(destDir, zipName)
+// 		writer, err := zipWriter.Create(baseInZip)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		_, err = io.Copy(writer, fileToZip)
+// 		if err != nil {
+// 			return err
+// 		}
+// 	}
+// 	return nil
+// }
 
-	// 1. Check if folder exists
-	if info, err := os.Stat(folderPath); err == nil && info.IsDir() {
-		INFO.Println("Found folder:", folderPath)
-		// Zip the folder
-		err := airflowengine.zipFolder(folderPath, destZipPath)
-		if err != nil {
-			ERROR.Println("failed to zip folder: %w", err)
-			return fmt.Errorf("failed to zip folder: %w", err)
-		}
-		INFO.Println("Zipped and copied to:", destZipPath)
-		return nil
-	}
+// func (airflowengine *AirflowEngine) importModule(moduleName string) error {
 
-	// 2. If not a folder, check if .zip file exists
-	if _, err := os.Stat(zipPath); err == nil {
-		INFO.Println("Found zip file:", zipPath)
-		// Copy to destination
-		err := airflowengine.copyFile(zipPath, destZipPath)
-		if err != nil {
-			ERROR.Println("failed to copy zip: %w", err)
-			return fmt.Errorf("failed to copy zip: %w", err)
-		}
-		INFO.Println("Copied zip to:", destZipPath)
-		return nil
-	}
+// 	localRepo := airflowengine.localPyModuleRepository
+// 	remoteRepo := airflowengine.remotePyModuleRepository
+// 	destDir := airflowengine.airflowHome
 
-	// 3. If neither found, download
-	INFO.Println("Module not found locally, downloading from external repo:", airflowengine.remotePyModuleRepository)
-	url := remoteRepo + "/" + moduleName
-	airflowengine.importPythonModuleFromRemote(url, airflowengine.airflowHome, moduleName)
+// 	folderPath := filepath.Join(localRepo, moduleName)
+// 	zipName := moduleName + ".zip"
+// 	zipPath := filepath.Join(localRepo, zipName)
+// 	destZipPath := filepath.Join(destDir, zipName)
 
-	return nil
-}
+// 	// 1. Check if folder exists
+// 	if info, err := os.Stat(folderPath); err == nil && info.IsDir() {
+// 		INFO.Println("Found folder:", folderPath)
 
-func (airflowengine *AirflowEngine) zipFolder(srcDir, destZip string) error {
-	zipfile, err := os.Create(destZip)
-	if err != nil {
-		return err
-	}
-	defer zipfile.Close()
+// 		// Zip the folder contents (not the folder itself)
+// 		files, err := os.ReadDir(folderPath)
+// 		if err != nil {
+// 			return fmt.Errorf("failed to read folder contents: %w", err)
+// 		}
 
-	archive := zip.NewWriter(zipfile)
-	defer archive.Close()
+// 		zipFile, err := os.Create(destZipPath)
+// 		if err != nil {
+// 			return fmt.Errorf("failed to create zip file: %w", err)
+// 		}
+// 		defer zipFile.Close()
 
-	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		relPath, err := filepath.Rel(filepath.Dir(srcDir), path)
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return nil // skip folders, added automatically
-		}
-		file, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer file.Close()
+// 		zipWriter := zip.NewWriter(zipFile)
+// 		defer zipWriter.Close()
 
-		writer, err := archive.Create(relPath)
-		if err != nil {
-			return err
-		}
-		_, err = io.Copy(writer, file)
-		return err
-	})
-}
+// 		for _, file := range files {
+// 			filePath := filepath.Join(folderPath, file.Name())
+// 			err = addFileToZip(zipWriter, filePath, file.Name())
+// 			if err != nil {
+// 				return fmt.Errorf("failed to add file to zip: %w", err)
+// 			}
+// 		}
 
-func (airflowengine *AirflowEngine) copyFile(src, dst string) error {
+// 		// // Zip the folder
+// 		// err := airflowengine.zipFolder(folderPath, destZipPath)
+// 		// if err != nil {
+// 		// 	ERROR.Println("failed to zip folder: %w", err)
+// 		// 	return fmt.Errorf("failed to zip folder: %w", err)
+// 		// }
+// 		INFO.Println("Zipped and copied to:", destZipPath)
+// 		return nil
+// 	}
+
+// 	// 2. If not a folder, check if .zip file exists
+// 	if _, err := os.Stat(zipPath); err == nil {
+// 		INFO.Println("Found zip file:", zipPath)
+// 		// Copy to destination
+// 		err := airflowengine.copyFile(zipPath, destZipPath)
+// 		if err != nil {
+// 			ERROR.Println("failed to copy zip: %w", err)
+// 			return fmt.Errorf("failed to copy zip: %w", err)
+// 		}
+// 		INFO.Println("Copied zip to:", destZipPath)
+// 		return nil
+// 	}
+
+// 	// 3. If neither found, download
+// 	INFO.Println("Module not found locally, downloading from external repo:", airflowengine.remotePyModuleRepository)
+// 	url := remoteRepo + "/" + moduleName
+// 	airflowengine.importPythonModuleFromRemote(url, airflowengine.airflowHome, moduleName)
+
+// 	return nil
+// }
+
+// func (airflowengine *AirflowEngine) zipFolder(srcDir, destZip string) error {
+// 	zipfile, err := os.Create(destZip)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer zipfile.Close()
+
+// 	archive := zip.NewWriter(zipfile)
+// 	defer archive.Close()
+
+// 	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+// 		if err != nil {
+// 			return err
+// 		}
+// 		relPath, err := filepath.Rel(filepath.Dir(srcDir), path)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		if info.IsDir() {
+// 			return nil // skip folders, added automatically
+// 		}
+// 		file, err := os.Open(path)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		defer file.Close()
+
+// 		writer, err := archive.Create(relPath)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		_, err = io.Copy(writer, file)
+// 		return err
+// 	})
+// }
+
+// func (airflowengine *AirflowEngine) copyFile(src, dst string) error {
+// 	in, err := os.Open(src)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer in.Close()
+
+// 	out, err := os.Create(dst)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer func() {
+// 		if cerr := out.Close(); cerr != nil && err == nil {
+// 			err = cerr
+// 		}
+// 	}()
+
+// 	_, err = io.Copy(out, in)
+// 	return err
+// }
+
+// Helper to copy individual files
+func copyFile(src, dst string, perm os.FileMode) error {
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -188,14 +271,135 @@ func (airflowengine *AirflowEngine) copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if cerr := out.Close(); cerr != nil && err == nil {
-			err = cerr
-		}
-	}()
+	defer out.Close()
 
-	_, err = io.Copy(out, in)
-	return err
+	if _, err = io.Copy(out, in); err != nil {
+		return err
+	}
+	return os.Chmod(dst, perm)
+}
+
+// Helper to copy individual files
+func copyFolder(srcFolder, dstFolder string) error {
+	// Check if source folder exists
+	srcInfo, err := os.Stat(srcFolder)
+	if err != nil {
+		return fmt.Errorf("source folder not found: %w", err)
+	}
+	if !srcInfo.IsDir() {
+		return fmt.Errorf("source path is not a directory: %s", srcFolder)
+	}
+
+	// Ensure dstFolder exists
+	if err := os.MkdirAll(dstFolder, 0755); err != nil {
+		return fmt.Errorf("failed to create dstFolder: %w", err)
+	}
+
+	// Walk through source and copy each file/dir
+	err = filepath.Walk(srcFolder, func(srcPath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(srcFolder, srcPath)
+		if err != nil {
+			return err
+		}
+		destPath := filepath.Join(dstFolder, relPath)
+
+		if info.IsDir() {
+			return os.MkdirAll(destPath, info.Mode())
+		}
+
+		// Copy file
+		return copyFile(srcPath, destPath, info.Mode())
+	})
+	if err != nil {
+		return fmt.Errorf("failed to copy folder: %w", err)
+	}
+
+	return nil
+}
+
+// Example:
+// libFolderName = taskId_lib
+// libFolderPath = airflow-home/taskId_lib/
+// libFolder = taskId_lib/
+
+// Example:
+// sanitizedModuleName = Task_TestPython_Main_2542520784
+func (airflowengine *AirflowEngine) getModuleName(pythonModule string, taskId string) string {
+	module := ""
+	if taskId == "" {
+		module = pythonModule
+	} else {
+		module = taskId
+	}
+	sanitizedModuleName := strings.ReplaceAll(module, ".", "_")
+	sanitizedModuleName = strings.ReplaceAll(sanitizedModuleName, "-", "_")
+	if LoggerIsEnabled(DEBUG) {
+		DEBUG.Println("ModuleName: ", sanitizedModuleName)
+	}
+	return sanitizedModuleName
+}
+
+// Return:
+// libFolderName = Task_TestPython_Main_2542520784_lib
+func (airflowengine *AirflowEngine) getLibFolderName(pythonModule string, taskId string) string {
+	folderName := airflowengine.getModuleName(pythonModule, taskId) + "_lib"
+	if LoggerIsEnabled(DEBUG) {
+		DEBUG.Println("LibFolderName: ", folderName)
+	}
+	return folderName
+}
+
+// Return:
+// libFolderName = Task_TestPython_Main_2542520784_lib/
+func (airflowengine *AirflowEngine) getLibFolder(pythonModule string, taskId string) string {
+	libFolder := airflowengine.getLibFolderName(pythonModule, taskId) + "/"
+	if LoggerIsEnabled(DEBUG) {
+		DEBUG.Println("LibFolder: ", libFolder)
+	}
+	return libFolder
+
+}
+
+// Return:
+// libFolderPath = airflow-home/Task_TestPython_Main_2542520784_lib/
+func (airflowengine *AirflowEngine) getLibFolderPath(pythonModule string, taskId string) string {
+	libFolderPath := filepath.Join(airflowengine.airflowHome, airflowengine.getLibFolder(pythonModule, taskId))
+	if LoggerIsEnabled(DEBUG) {
+		DEBUG.Println("LibFolderPath: ", libFolderPath)
+	}
+	return libFolderPath
+}
+
+// // return the new libdirectory name and full path
+// func (airflowengine *AirflowEngine) getLibDir(folder string) (string, string) {
+// 	sanitizedFolderName := strings.ReplaceAll(folder, ".", "_") + "_lib"
+// 	sanitizedFolderName = strings.ReplaceAll(sanitizedFolderName, "-", "_")
+// 	libDir := filepath.Join(airflowengine.airflowHome, sanitizedFolderName)
+// 	return sanitizedFolderName, libDir
+// }
+
+func (airflowengine *AirflowEngine) importModuleAsFolder(moduleName string, taskId string) error {
+
+	localRepo := airflowengine.localPyModuleRepository
+	destDir := airflowengine.getLibFolderPath(moduleName, taskId)
+	// if taskId == "" {
+	// 	_, destDir = airflowengine.getLibDir(moduleName)
+	// } else {
+	// 	_, destDir = airflowengine.getLibDir(taskId)
+	// }
+	// destDir := airflowengine.airflowHome
+
+	srcFolder := filepath.Join(localRepo, moduleName)
+
+	copyFolder(srcFolder, destDir)
+
+	fmt.Printf("[INFO] Module %s imported into %s\n", moduleName, destDir)
+	return nil
+
 }
 
 // downloadZip downloads a ZIP file from a URL and saves it in targetFolder with the given filename.
@@ -238,14 +442,14 @@ func (airflowengine *AirflowEngine) importPythonModuleFromRemote(url string, tar
 	return nil
 }
 
-// ensureIgnore adds a line to .airflowignore to ignore filename.zip
-func (airflowengine *AirflowEngine) airflowIgnore(dagsDir string, zipFilename string) error {
+// ensureIgnore adds a line to .airflowignore to ignore folder
+func (airflowengine *AirflowEngine) airflowIgnore(dagsDir string, pathToIgnore string) error {
 
-	ignoreFilePath := filepath.Join(dagsDir, ".airflowignore")
+	ignoreFile := filepath.Join(dagsDir, ".airflowignore")
 
 	// Create file if it doesn't exist
-	if _, err := os.Stat(ignoreFilePath); os.IsNotExist(err) {
-		file, err := os.Create(ignoreFilePath)
+	if _, err := os.Stat(ignoreFile); os.IsNotExist(err) {
+		file, err := os.Create(ignoreFile)
 		if err != nil {
 			ERROR.Println("error creating .airflowignore: %w", err)
 			return fmt.Errorf("error creating .airflowignore: %w", err)
@@ -253,8 +457,8 @@ func (airflowengine *AirflowEngine) airflowIgnore(dagsDir string, zipFilename st
 		defer file.Close()
 	}
 
-	// Check if filename.zip is already ignored
-	file, err := os.Open(ignoreFilePath)
+	// Check if pathToIgnore is already ignored
+	file, err := os.Open(ignoreFile)
 	if err != nil {
 		ERROR.Println("error opening .airflowignore: %w", err)
 		return fmt.Errorf("error opening .airflowignore: %w", err)
@@ -264,7 +468,7 @@ func (airflowengine *AirflowEngine) airflowIgnore(dagsDir string, zipFilename st
 	scanner := bufio.NewScanner(file)
 	alreadyPresent := false
 	for scanner.Scan() {
-		if strings.TrimSpace(scanner.Text()) == zipFilename {
+		if strings.TrimSpace(scanner.Text()) == pathToIgnore {
 			alreadyPresent = true
 			break
 		}
@@ -276,23 +480,23 @@ func (airflowengine *AirflowEngine) airflowIgnore(dagsDir string, zipFilename st
 
 	// If not present, append it
 	if !alreadyPresent {
-		f, err := os.OpenFile(ignoreFilePath, os.O_APPEND|os.O_WRONLY, 0644)
+		f, err := os.OpenFile(ignoreFile, os.O_APPEND|os.O_WRONLY, 0644)
 		if err != nil {
 			ERROR.Println("error appending .airflowignore: %w", err)
 			return fmt.Errorf("error appending to .airflowignore: %w", err)
 		}
 		defer f.Close()
 
-		if _, err := f.WriteString(zipFilename + "\n"); err != nil {
+		if _, err := f.WriteString(pathToIgnore + "\n"); err != nil {
 			ERROR.Println("error writing .airflowignore: %w", err)
 			return fmt.Errorf("error writing to .airflowignore: %w", err)
 		}
 		// fmt.Printf("Added %s to .airflowignore\n", zipFilename)
-		INFO.Printf("Added %s to .airflowignore\n", zipFilename)
+		INFO.Printf("Added %s to .airflowignore\n", pathToIgnore)
 
 	} else {
 		// fmt.Printf("%s is already in .airflowignore\n", zipFilename)
-		INFO.Printf("%s is already in .airflowignore\n", zipFilename)
+		INFO.Printf("%s is already in .airflowignore\n", pathToIgnore)
 
 	}
 
@@ -350,29 +554,52 @@ func (airflowengine *AirflowEngine) airflowIgnore(dagsDir string, zipFilename st
 // 	return string(jsonBytes)
 // }
 
-func (airflowengine *AirflowEngine) PullImage(moduleName string) (string, error) {
+func (airflowengine *AirflowEngine) PullImage(moduleName string, ephemeralId ...string) (string, error) {
+
+	taskId := ""
+	if len(ephemeralId) > 0 {
+		taskId = ephemeralId[0]
+	}
 
 	// module := moduleName + ".zip"
-	airflowengine.airflowIgnore(airflowengine.airflowHome, moduleName+".zip")
+	// airflowengine.airflowIgnore(airflowengine.airflowHome, moduleName, taskId)
+	// moduleFolderName := ""
+	// if taskId == "" {
+	// 	moduleFolderName, _ = airflowengine.getLibDir(moduleName)
+	// } else {
+	// 	moduleFolderName, _ = airflowengine.getLibDir(taskId)
+	// }
+	// if !strings.HasSuffix(moduleFolderName, "/") {
+	// 	moduleFolderName += "/"
+	// }
+	//
+	// airflowengine.airflowIgnore(airflowengine.airflowHome, moduleFolderName)
+
+	airflowengine.getLibFolder(moduleName, taskId)
 
 	// url := airflowengine.remotePyModuleRepository + "/" + module
 	// airflowengine.importPythonModuleFromRemote(url, airflowengine.airflowHome, moduleName)
 
-	airflowengine.importModule(moduleName)
+	airflowengine.importModuleAsFolder(moduleName, taskId)
 
-	return "nil", nil
+	return airflowengine.getLibFolderName(moduleName, taskId), nil
 }
 
 // functionCode string, taskID string, adminCfg []interface{}, servicePorts []string)
 func (airflowengine *AirflowEngine) StartTask(task *ScheduledTaskInstance, brokerURL string, taskCommands []interface{}) (string, string, error) {
 
-	airflowengine.PullImage(task.PythonModule)
+	INFO.Printf(
+		"TaskInstance => ID: %s | TopologyName: %s | TaskName: %s | ServiceIntentID: %s\n",
+		task.ID, task.TopologyName, task.TaskName, task.ServiceIntentID,
+	)
+
+	airflowengine.PullImage(task.PythonModule, task.ID)
 
 	jsonBytes, _ := json.Marshal(taskCommands)
 	jsonConfiguration := string(jsonBytes)
 
 	// airflowengine.generateDAG(task.PythonModule, task.PythonPackage, airflowengine.generateCommandsList(task, brokerURL))
-	airflowengine.generateDAG(task.PythonModule, task.PythonPackage, jsonConfiguration)
+	airflowengine.generateDAG(task.PythonModule, task.PythonPackage, task.ID, jsonConfiguration)
 
 	//return container.ID, refURL, nil
 	return "", "", nil

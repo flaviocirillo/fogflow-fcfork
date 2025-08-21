@@ -33,7 +33,7 @@ func (mec *EdgeController) Init(cfg *Config) bool {
 	return true
 }
 
-func (mec *EdgeController) PullImage(dockerImage string) (string, error) {
+func (mec *EdgeController) PullImage(dockerImage string, ephemeralId ...string) (string, error) {
 	return "test", nil
 }
 

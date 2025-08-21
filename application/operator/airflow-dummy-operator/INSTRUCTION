@@ -1,0 +1,13 @@
+This folder contains an operator that can be used with an airflow client
+To have this operator deployed 
+- Airflow should be already installed in your machine and running.
+- All the library needed for your operator should be already installed in your machine
+- Configure the Worker as Airflow worker. For doing so:
+    - Add in config.json: worker."container_management" : "airflow"
+    - Add docker-compose.yml (change /tmp/* to your local folders): 
+        - /tmp/airflow_home:/airflow_home      
+        - /tmp/localpyrepo:/local_pymodules_repository
+- Put the content of this folder (starting from "dummymodulde-1.0.0" into the chosen /tmp/localpyrepo/. 
+    - First option: You put the folder as it is with the whole structure. So you can change the content and the folder is newly taked for each deployment
+    - Second option: You compress the folder as zip file and put the zip file "dummymodulde-1.0.0.zip" into the localpyrepo folder. In this way you can have releases of it. (but you need to create the zip file).
+    PLEASE NOTE: in the first option, the zip file is created on the fly by the worker
