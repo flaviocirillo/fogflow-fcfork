@@ -56,7 +56,7 @@ func (dockerengine *DockerEngine) Init(cfg *Config) bool {
 	return true
 }
 
-func (dockerengine *DockerEngine) PullImage(dockerImage string , ephemeralId ...string) (string, error) {
+func (dockerengine *DockerEngine) PullImage(dockerImage string, ephemeralId ...string) (string, error) {
 	auth := docker.AuthConfiguration{}
 
 	if dockerengine.workerCfg.Worker.Registry.IsConfigured() {
@@ -190,7 +190,7 @@ func (dockerengine *DockerEngine) StartTask(task *ScheduledTaskInstance, brokerU
 	for _, parameter := range task.Parameters {
 		// deal with the service port
 		if parameter.Name == "service_port" {
-			servicePorts = strings.Split(parameter.Value, ";")
+			servicePorts = strings.Split(*parameter.Value.String, ";")
 		}
 
 		var gpu_count = 0
@@ -199,10 +199,10 @@ func (dockerengine *DockerEngine) StartTask(task *ScheduledTaskInstance, brokerU
 			DEBUG.Println("Enable NVIDIA gpus")
 			hostConfig.Runtime = "nvidia"
 
-			if parameter.Value == "all" {
+			if *parameter.Value.String == "all" {
 				gpu_count = -1
 			} else {
-				gpu_count, err = strconv.Atoi(parameter.Value)
+				gpu_count, err = strconv.Atoi(*parameter.Value.String)
 				DEBUG.Println("Error converting parameter to int: ", err)
 			}
 

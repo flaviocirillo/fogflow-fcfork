@@ -128,6 +128,14 @@ func (w *Worker) Process(msg *RecvMessage) error {
 		if err == nil {
 			w.onScheduledTask(msg.From, &task)
 		}
+
+	case "PATCH_TASK":
+		taskPatch := TaskPatch{}
+		err = json.Unmarshal(msg.PayLoad, &taskPatch)
+		if err == nil {
+			w.onPatchTask(&taskPatch)
+		}
+
 	case "REMOVE_TASK":
 		task := ScheduledTaskInstance{}
 		err = json.Unmarshal(msg.PayLoad, &task)
@@ -146,6 +154,13 @@ func (w *Worker) Process(msg *RecvMessage) error {
 		err = json.Unmarshal(msg.PayLoad, &flow)
 		if err == nil {
 			w.onRemoveInput(msg.From, &flow)
+		}
+
+	case "PREFETCH_PYTHON_PACKAGE":
+		var pythonPackage PythonPackage
+		err = json.Unmarshal(msg.PayLoad, &pythonPackage)
+		if err == nil {
+			w.onPrefetchPythonModule(&pythonPackage)
 		}
 
 	case "PREFETCH_IMAGE":
@@ -280,6 +295,15 @@ func (w *Worker) onScheduledTask(from string, task *ScheduledTaskInstance) {
 	}
 }
 
+func (w *Worker) onPatchTask(taskPatch *TaskPatch) {
+	switch taskPatch.PatchType {
+	case "REFETCH":
+		runningTask := w.allTasks[taskPatch.TaskID]
+		INFO.Println("I am going to fetch the python package", runningTask.PythonModule, "for task", taskPatch.TaskID)
+		go w.executor.PullImage(runningTask.PythonModule, "", taskPatch.TaskID)
+	}
+}
+
 func (w *Worker) onTerminateTask(from string, task *ScheduledTaskInstance) {
 	w.taskList_lock.Lock()
 	defer w.taskList_lock.Unlock()
@@ -353,4 +377,9 @@ func (w *Worker) onTerminateTask(from string, task *ScheduledTaskInstance) {
 func (w *Worker) onPrefetchImage(dockerImage *DockerImage) {
 	INFO.Println("I am going to fetch the docker image", dockerImage.ImageName)
 	go w.executor.PullImage(dockerImage.ImageName, dockerImage.ImageTag)
+}
+
+func (w *Worker) onPrefetchPythonModule(pythonPackage *PythonPackage) {
+	INFO.Println("I am going to fetch the python package", pythonPackage.ModuleName)
+	go w.executor.PullImage(pythonPackage.ModuleName, pythonPackage.ModuleVersion)
 }

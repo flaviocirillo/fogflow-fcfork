@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -279,20 +281,26 @@ func copyFile(src, dst string, perm os.FileMode) error {
 	return os.Chmod(dst, perm)
 }
 
-// Helper to copy individual files
 func copyFolder(srcFolder, dstFolder string) error {
 	// Check if source folder exists
 	srcInfo, err := os.Stat(srcFolder)
 	if err != nil {
+		ERROR.Printf("source folder not found: %s", err)
 		return fmt.Errorf("source folder not found: %w", err)
 	}
 	if !srcInfo.IsDir() {
+		ERROR.Printf("source path is not a directory: %s", srcFolder)
 		return fmt.Errorf("source path is not a directory: %s", srcFolder)
 	}
 
 	// Ensure dstFolder exists
 	if err := os.MkdirAll(dstFolder, 0755); err != nil {
+		ERROR.Printf("failed to create dstFolder: %s", err)
 		return fmt.Errorf("failed to create dstFolder: %w", err)
+	}
+
+	if LoggerIsEnabled(DEBUG) {
+		DEBUG.Printf("Going to walk through the path: %s", srcFolder)
 	}
 
 	// Walk through source and copy each file/dir
@@ -308,7 +316,14 @@ func copyFolder(srcFolder, dstFolder string) error {
 		destPath := filepath.Join(dstFolder, relPath)
 
 		if info.IsDir() {
+			if LoggerIsEnabled(DEBUG) {
+				DEBUG.Printf("Generating directory: %s", destPath)
+			}
 			return os.MkdirAll(destPath, info.Mode())
+		}
+
+		if LoggerIsEnabled(DEBUG) {
+			DEBUG.Printf("Copying file: %s to destination: %s", srcPath, destPath)
 		}
 
 		// Copy file
@@ -316,6 +331,86 @@ func copyFolder(srcFolder, dstFolder string) error {
 	})
 	if err != nil {
 		return fmt.Errorf("failed to copy folder: %w", err)
+	}
+
+	return nil
+}
+
+// func (airflowengine *AirflowEngine) checkLocalPythonRepository() error {
+
+// 	path := airflowengine.localPyModuleRepository
+
+// 	entries, err := os.ReadDir(path)
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+
+// 	for _, entry := range entries {
+// 		fullPath := filepath.Join(path, entry.Name())
+
+// 		info, err := os.Stat(fullPath) // follows symlinks
+// 		if err != nil {
+// 			log.Printf("error reading %s: %v\n", fullPath, err)
+// 			continue
+// 		}
+
+// 		if info.IsDir() {
+// 			fmt.Println("[DIR] ", entry.Name())
+// 		} else {
+// 			fmt.Println("[FILE]", entry.Name())
+// 		}
+// 	}
+
+// 	return err
+// }
+
+func (airflowengine *AirflowEngine) checkLocalPythonRepository() error {
+	path := airflowengine.localPyModuleRepository
+
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, entry := range entries {
+		fullPath := filepath.Join(path, entry.Name())
+
+		info, err := os.Lstat(fullPath) // <-- Lstat does NOT follow symlinks
+		if err != nil {
+			log.Printf("error reading %s: %v\n", fullPath, err)
+			continue
+		}
+
+		// Detect if this entry is a symlink
+		if info.Mode()&os.ModeSymlink != 0 {
+			fmt.Println("[SYMLINK]", entry.Name())
+			// Optionally, check if the symlink points to a directory accessible in the container
+			targetInfo, err := os.Stat(fullPath) // only works if target exists in container
+			if err == nil && targetInfo.IsDir() {
+				// Recurse using filepath.WalkDir for accessible folders behind symlink
+				filepath.WalkDir(fullPath, func(path string, d fs.DirEntry, err error) error {
+					if err != nil {
+						return nil // skip inaccessible paths
+					}
+					relPath, _ := filepath.Rel(fullPath, path)
+					fmt.Printf("[SYMLINK CONTENT] %s\n", relPath)
+					return nil
+				})
+			}
+		} else if info.IsDir() {
+			fmt.Println("[DIR] ", entry.Name())
+			// Walk normally if you want to list contents
+			filepath.WalkDir(fullPath, func(path string, d fs.DirEntry, err error) error {
+				if err != nil {
+					return nil
+				}
+				relPath, _ := filepath.Rel(fullPath, path)
+				fmt.Printf("[CONTENT] %s\n", relPath)
+				return nil
+			})
+		} else {
+			fmt.Println("[FILE]", entry.Name())
+		}
 	}
 
 	return nil
@@ -395,11 +490,14 @@ func (airflowengine *AirflowEngine) importModuleAsFolder(moduleName string, task
 
 	srcFolder := filepath.Join(localRepo, moduleName)
 
-	copyFolder(srcFolder, destDir)
+	err := copyFolder(srcFolder, destDir)
+	if err != nil {
+		ERROR.Print(err)
+	} else {
+		INFO.Printf("Module %s imported into %s\n", moduleName, destDir)
+	}
 
-	fmt.Printf("[INFO] Module %s imported into %s\n", moduleName, destDir)
-	return nil
-
+	return err
 }
 
 // downloadZip downloads a ZIP file from a URL and saves it in targetFolder with the given filename.
@@ -556,6 +654,10 @@ func (airflowengine *AirflowEngine) airflowIgnore(dagsDir string, pathToIgnore s
 
 func (airflowengine *AirflowEngine) PullImage(moduleName string, ephemeralId ...string) (string, error) {
 
+	INFO.Println("I am going to fetch the python package", moduleName, "for task", ephemeralId)
+
+	moduleName = strings.ReplaceAll(moduleName, ":", "-")
+
 	taskId := ""
 	if len(ephemeralId) > 0 {
 		taskId = ephemeralId[0]
@@ -579,6 +681,10 @@ func (airflowengine *AirflowEngine) PullImage(moduleName string, ephemeralId ...
 
 	// url := airflowengine.remotePyModuleRepository + "/" + module
 	// airflowengine.importPythonModuleFromRemote(url, airflowengine.airflowHome, moduleName)
+
+	if LoggerIsEnabled(DEBUG) {
+		airflowengine.checkLocalPythonRepository()
+	}
 
 	airflowengine.importModuleAsFolder(moduleName, taskId)
 

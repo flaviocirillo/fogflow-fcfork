@@ -512,6 +512,7 @@ app.post('/dockerimage/:operator', jsonParser, async function (req, res) {
     res.sendStatus(200)
 });
 
+
 app.delete('/dockerimage/:operator', jsonParser, async function (req, res) {
     var operatorName = req.params.operator;
     var dockerimage = req.query.image; 
@@ -528,6 +529,21 @@ app.delete('/dockerimage/:operator', jsonParser, async function (req, res) {
     }    
 
     res.sendStatus(200)
+});
+
+
+app.patch('/task', jsonParser, async (req, res) => {
+    try {
+        let taskPatch = req.body;
+
+        console.log(`Received PATCH for task ${taskPatch.taskId} with action ${taskPatch}`);
+
+        publishMetadata("TASK_PATCH", taskPatch)
+    
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Internal server error" });
+    }
 });
 
 app.delete('/operator/:name', async function (req, res) {

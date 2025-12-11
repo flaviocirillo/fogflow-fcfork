@@ -2,6 +2,7 @@ package datamodel
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	. "fogflow/common/ngsi"
@@ -30,6 +31,13 @@ type TaskUpdate struct {
 	ServiceIntentID string
 
 	Status string
+}
+
+type TaskPatch struct {
+	TaskID    string `json:"taskId"`
+	WorkerID  string `json:"workerId"`
+	PatchType string `json:"patchType"`
+	Patch     string `json:"patch"`
 }
 
 type TaskInfo struct {
@@ -125,8 +133,58 @@ type OutputStreamConfig struct {
 }
 
 type Parameter struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
+	Name  string         `json:"name"`
+	Value ParameterValue `json:"value"`
+}
+
+// ParameterValue can be either a string or a map[string]string.
+type ParameterValue struct {
+	String *string
+	Map    map[string]string
+}
+
+// Optional helpers
+func (v ParameterValue) AsString() (string, bool) {
+	if v.String == nil {
+		return "", false
+	}
+	return *v.String, true
+}
+func (v ParameterValue) AsMap() (map[string]string, bool) {
+	if v.Map == nil {
+		return nil, false
+	}
+	return v.Map, true
+}
+
+func (v *ParameterValue) UnmarshalJSON(b []byte) error {
+	// try string
+	var s string
+	if err := json.Unmarshal(b, &s); err == nil {
+		v.String = &s
+		v.Map = nil
+		return nil
+	}
+	// try map[string]string
+	var m map[string]string
+	if err := json.Unmarshal(b, &m); err == nil {
+		v.Map = m
+		v.String = nil
+		return nil
+	}
+	return fmt.Errorf("value must be string or object with string values")
+}
+
+// (Nice-to-have) Preserve the original shape when re-encoding.
+func (v ParameterValue) MarshalJSON() ([]byte, error) {
+	if v.String != nil {
+		return json.Marshal(*v.String)
+	}
+	if v.Map != nil {
+		return json.Marshal(v.Map)
+	}
+	// null if neither set
+	return []byte("null"), nil
 }
 
 type Operator struct {

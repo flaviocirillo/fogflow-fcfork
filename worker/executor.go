@@ -77,8 +77,14 @@ func (e *Executor) GetNumOfTasks() int {
 	return len(e.taskInstances)
 }
 
-func (e *Executor) PullImage(dockerImage string, tag string) (string, error) {
-	return e.client.PullImage(dockerImage + ":" + tag)
+func (e *Executor) PullImage(dockerImage string, tag string, ephemeralId ...string) (string, error) {
+	var image string
+	if tag != "" {
+		image = dockerImage + ":" + tag
+	} else {
+		image = dockerImage
+	}
+	return e.client.PullImage(image, ephemeralId...)
 }
 
 func (e *Executor) LaunchTask(task *ScheduledTaskInstance) bool {
@@ -101,6 +107,10 @@ func (e *Executor) LaunchTask(task *ScheduledTaskInstance) bool {
 
 	taskCommands := e.generateTaskCommandsList(task, e.brokerURL)
 
+	if LoggerIsEnabled(DEBUG) {
+		DEBUG.Println("taskCommands: ", taskCommands)
+	}
+
 	// start a container to run the scheduled task instance
 	containerId, refURL, err := e.client.StartTask(task, e.brokerURL, taskCommands)
 	if err != nil {
@@ -118,7 +128,7 @@ func (e *Executor) LaunchTask(task *ScheduledTaskInstance) bool {
 	for _, parameter := range task.Parameters {
 		// deal with the service port
 		if parameter.Name == "service-port" {
-			servicePorts = strings.Split(parameter.Value, ";")
+			servicePorts = strings.Split(*parameter.Value.String, ";")
 		}
 	}
 	if len(servicePorts) > 0 {
@@ -127,7 +137,7 @@ func (e *Executor) LaunchTask(task *ScheduledTaskInstance) bool {
 		taskCtx.EndPointServiceIDs = append(taskCtx.EndPointServiceIDs, eid)
 	}
 
-	INFO.Printf("subscribe its input streams")
+	INFO.Printf("Check if to subscribe its input streams")
 
 	// subscribe input streams on behalf of the launched task
 	taskCtx.Subscriptions = make([]string, 0)
@@ -146,6 +156,8 @@ func (e *Executor) LaunchTask(task *ScheduledTaskInstance) bool {
 			} else {
 				ERROR.Println(err)
 			}
+		} else {
+			INFO.Printf("Not pub-sub method for type:%s and id:%s", inputStream.Type, inputStream.ID)
 		}
 	}
 
@@ -523,6 +535,7 @@ func (e *Executor) generateTaskCommandsList(task *ScheduledTaskInstance, brokerU
 	for _, parameter := range task.Parameters {
 
 		setParameterCmd := make(map[string]interface{})
+		setParameterCmd["command"] = "SET_PARAMETER"
 		setParameterCmd["name"] = parameter.Name
 		setParameterCmd["value"] = parameter.Value
 		commands = append(commands, setParameterCmd)

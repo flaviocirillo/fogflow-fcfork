@@ -231,7 +231,10 @@ func (mec *EdgeController) sendRequest(method string, url string, parameters []P
 
 	for _, parameter := range parameters {
 		INFO.Println(parameter.Name, parameter.Value)
-		request.Header.Set(parameter.Name, parameter.Value)
+		parameterValueString, isString := parameter.Value.AsString()
+		if isString {
+			request.Header.Set(parameter.Name, parameterValueString)
+		}
 	}
 
 	INFO.Println("=========END parameters==========")

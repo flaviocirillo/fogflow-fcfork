@@ -355,6 +355,13 @@ func (master *Master) Process(msg *RecvMessage) error {
 			master.onTaskUpdate(msg.From, &update)
 		}
 
+	case "TASK_PATCH":
+		patch := TaskPatch{}
+		err := json.Unmarshal(msg.PayLoad, &patch)
+		if err == nil {
+			master.onTaskPatch(msg.From, &patch)
+		}
+
 	case "ServiceIntent":
 		serviceIntent := ServiceIntent{}
 		err := json.Unmarshal(msg.PayLoad, &serviceIntent)
@@ -417,6 +424,11 @@ func (master *Master) onTaskUpdate(from string, update *TaskUpdate) {
 	INFO.Println("[Task update]: ", update)
 }
 
+func (master *Master) onTaskPatch(from string, patch *TaskPatch) {
+	INFO.Println("[Task patch]: ", patch)
+	master.PatchTask(patch)
+}
+
 func (master *Master) DeployTask(taskInstance *ScheduledTaskInstance) {
 	master.counter_lock.Lock()
 	master.curNumOfTasks = master.curNumOfTasks + 1
@@ -438,6 +450,19 @@ func (master *Master) DeployTask(taskInstance *ScheduledTaskInstance) {
 	workerProfile := master.workers[workerID]
 	workerProfile.Workload = workerProfile.Workload + 1
 	master.workerList_lock.Unlock()
+}
+
+func (master *Master) PatchTask(patch *TaskPatch) {
+	master.workerList_lock.Lock()
+	defer master.workerList_lock.Unlock()
+
+	workerProfile := master.workers[patch.WorkerID]
+	if workerProfile != nil {
+
+		taskMsg := SendMessage{Type: "PATCH_TASK", RoutingKey: patch.WorkerID + ".", From: master.id, PayLoad: *patch}
+		INFO.Println(taskMsg)
+		master.communicator.Publish(&taskMsg)
+	}
 }
 
 func (master *Master) TerminateTask(taskInstance *ScheduledTaskInstance) {

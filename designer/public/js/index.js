@@ -842,6 +842,7 @@ $(function () {
         html += '<th>Task</th>';
         html += '<th>Worker</th>';
         html += '<th>Status</th>';
+        html += '<th>Action</th>';
         html += '</tr></thead>';
 
         for (var i = 0; i < tasks.length; i++) {
@@ -858,6 +859,7 @@ $(function () {
             } else {
                 html += '<td><font color="green">' + task.Status + '</font></td>';
             }
+            html += '<td><button id="refetch-' + task.TaskID + '" type="button" class="btn btn-primary btn-separator">refetch</button></td>';          
 
             html += '</tr>';
         }
@@ -865,6 +867,35 @@ $(function () {
         html += '</table>';
 
         $('#content').html(html);
+
+        // associate a click handler to the editor button
+        for (let i = 0; i < tasks.length; i++) {
+            let task = tasks[i];
+            let refetchButton = document.getElementById('refetch-' + task.TaskID);
+
+            refetchButton.onclick = () => {
+                const patch = {
+                    taskId: task.TaskID,
+                    workerId: task.Worker,
+                    patchType: "REFETCH",
+                    patch: ""
+                };
+
+                console.log("patch:", patch)
+
+                fetch("/task", {
+                    method: "PATCH",
+                    headers: {
+                        Accept: "application/json",
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(patch)
+                })
+                .catch(err => {
+                    console.log('failed to patch task, ', err);
+                });
+            };   
+        }
     }
 
     function showEntities() {
