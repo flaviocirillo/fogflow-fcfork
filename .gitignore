@@ -10,3 +10,14 @@
 node_modules
 doc/en/_build/
 doc/en/source/figures/~$figures.pptx
+broker/broker
+broker/broker_arm
+broker/linux/amd64/broker
+broker/linux/arm/broker
+broker/linux/arm64/broker
+worker/executor.go.orig
+worker/worker
+worker/worker.go.orig
+worker/linux/amd64/worker
+worker/linux/arm64/worker
+worker/linux/arm/worker
