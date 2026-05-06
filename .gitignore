@@ -21,3 +21,7 @@ worker/worker.go.orig
 worker/linux/amd64/worker
 worker/linux/arm64/worker
 worker/linux/arm/worker
+release/latest/.config.json
+release/latest/.env.generated
+release/latest/.nginx.conf
+release/latest/fogflow.config
