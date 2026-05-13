@@ -159,6 +159,8 @@ func (tb *ThinBroker) NGSIV1_SubscribeContext(w rest.ResponseWriter, r *rest.Req
 	subReq.Subscriber.DestinationType = r.Header.Get("Destination")
 	subReq.Subscriber.Tenant = r.Header.Get("Ngsild-Tenant")
 	subReq.Subscriber.Correlator = r.Header.Get("Fiware-Correlator")
+	subReq.Subscriber.NGSILDDelivery = r.Header.Get("NGSI-LD-Delivery")
+	subReq.Subscriber.NGSILDNotificationPath = r.Header.Get("NGSI-LD-Notification-Path")
 
 	// DEBUG.Println(subReq.Subscriber)
 

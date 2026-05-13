@@ -290,7 +290,7 @@ func (e *Executor) subscribeInputStream(refURL string, correlatorID string, inpu
 	subscription.Reference = refURL
 
 	client := NGSI10Client{IoTBrokerURL: e.brokerURL, SecurityCfg: &e.workerCfg.HTTPS}
-	sid, err := client.SubscribeContext(&subscription, correlatorID, true, inputStream.InformationModel)
+	sid, err := client.SubscribeContext(&subscription, correlatorID, true, inputStream.InformationModel, inputStream.NGSILDDelivery, inputStream.NGSILDNotificationPath)
 	if err != nil {
 		ERROR.Println(err)
 		return "", err

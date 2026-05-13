@@ -252,6 +252,17 @@ $(function() {
             toggleHidingField(configuratorElement,'input[name="parallelization"]', 'select[name="groupby"]', "EntityType")
             toggleHidingField(configuratorElement,'input[name="numberofinstances"]', 'select[name="groupby"]', "EntityType")
             toggleHidingField(configuratorElement,'select[name="parallelizationcriteria"]', 'select[name="groupby"]', "EntityType")
+
+            // NGSI-LD delivery: only relevant when information model is NGSI-LD
+            toggleHidingField(configuratorElement, 'select[name="ngsilddelivery"]', 'select[name="informationmodel"]', "NGSI-LD")
+            toggleHidingField(configuratorElement, 'input[name="notificationpath"]', 'select[name="informationmodel"]', "NGSI-LD")
+
+            const imSel = configuratorElement.querySelector('select[name="informationmodel"]');
+            if (imSel) {
+                setTimeout(function () {
+                    imSel.dispatchEvent(new Event('change', { bubbles: true }));
+                }, 0);
+            }
         }
     }
 
@@ -404,6 +415,16 @@ $(function() {
                             inputstream.groupby = block.values['groupby'];
                             inputstream.scoped = true;
                             inputstream.information_model = block.values['informationmodel'];
+                            if (block.values['informationmodel'] === 'NGSI-LD') {
+                                var ldDelS = block.values['ngsilddelivery'] || 'upsert';
+                                if (ldDelS === 'notification') {
+                                    inputstream.ngsi_ld_delivery = 'notification';
+                                }
+                                var npS = (block.values['notificationpath'] || '').toString().trim();
+                                if (npS) {
+                                    inputstream.notification_path = npS;
+                                }
+                            }
 
                             inputstreams.push(inputstream)
                         } else if (block.type == 'EntityStream') {
@@ -420,7 +441,16 @@ $(function() {
                             inputstream.groupby = block.values['groupby'];
                             inputstream.scoped = block.values['scoped'];
                             inputstream.information_model = block.values['informationmodel'];
-
+                            if (block.values['informationmodel'] === 'NGSI-LD') {
+                                var ldDel = block.values['ngsilddelivery'] || 'upsert';
+                                if (ldDel === 'notification') {
+                                    inputstream.ngsi_ld_delivery = 'notification';
+                                }
+                                var np = (block.values['notificationpath'] || '').toString().trim();
+                                if (np) {
+                                    inputstream.notification_path = np;
+                                }
+                            }
 
                             inputstreams.push(inputstream)
                         }

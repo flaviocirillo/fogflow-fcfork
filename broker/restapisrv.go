@@ -90,7 +90,7 @@ func (apisrv *RestApiSrv) Start(cfg *Config, broker *ThinBroker) {
 			return true
 		},
 		AllowedMethods:                []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:                []string{"Accept", "Content-Type", "X-Custom-Header", "Origin", "Destination"},
+		AllowedHeaders:                []string{"Accept", "Content-Type", "X-Custom-Header", "Origin", "Destination", "NGSI-LD-Delivery", "NGSI-LD-Notification-Path"},
 		AccessControlAllowCredentials: true,
 		AccessControlMaxAge:           3600,
 	})

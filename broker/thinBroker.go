@@ -591,11 +591,14 @@ func (tb *ThinBroker) sendReliableNotifyToSubscriber(elements []ContextElement, 
 	subscription, ok := tb.subscriptions[sid]
 	if !ok {
 		tb.subscriptions_lock.Unlock()
+		return
 	}
 	subscriberURL := subscription.Reference
 
 	notifyVersion := subscription.Subscriber.DestinationType
 	Tenant := subscription.Subscriber.Tenant
+	ldDelivery := subscription.Subscriber.NGSILDDelivery
+	ldNotifyPath := subscription.Subscriber.NGSILDNotificationPath
 
 	if subscription.Subscriber.RequireReliability && len(subscription.Subscriber.NotifyCache) > 0 {
 		if LoggerIsEnabled(DEBUG) {
@@ -617,7 +620,7 @@ func (tb *ThinBroker) sendReliableNotifyToSubscriber(elements []ContextElement, 
 
 	if len(elements) > 0 {
 
-		err := postNotifyContext(elements, sid, subscriberURL, notifyVersion, Tenant, tb.SecurityCfg)
+		err := postNotifyContext(elements, sid, subscriberURL, notifyVersion, Tenant, tb.SecurityCfg, ldDelivery, ldNotifyPath)
 
 		if err != nil {
 			if LoggerIsEnabled(DEBUG) {
@@ -629,7 +632,7 @@ func (tb *ThinBroker) sendReliableNotifyToSubscriber(elements []ContextElement, 
 
 			//UNCOMMENTME
 			// Retry once
-			err = postNotifyContext(elements, sid, subscriberURL, notifyVersion, Tenant, tb.SecurityCfg)
+			err = postNotifyContext(elements, sid, subscriberURL, notifyVersion, Tenant, tb.SecurityCfg, ldDelivery, ldNotifyPath)
 			if err != nil && LoggerIsEnabled(DEBUG) {
 				DEBUG.Println("Retry failed for NOTIFY to subscriber:", subscriberURL, err)
 			}

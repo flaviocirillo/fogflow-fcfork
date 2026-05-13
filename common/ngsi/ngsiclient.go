@@ -336,7 +336,7 @@ func (nc *NGSI10Client) InternalQueryContext(query *QueryContextRequest) ([]Cont
 	return ctxElements, nil
 }
 
-func (nc *NGSI10Client) SubscribeContext(sub *SubscribeContextRequest, correlatorID string, requireReliability bool, informationModel string) (string, error) {
+func (nc *NGSI10Client) SubscribeContext(sub *SubscribeContextRequest, correlatorID string, requireReliability bool, informationModel string, ngsiLDDelivery string, ngsiLDNotificationPath string) (string, error) {
 	body, err := json.Marshal(*sub)
 	if err != nil {
 		return "", err
@@ -353,6 +353,12 @@ func (nc *NGSI10Client) SubscribeContext(sub *SubscribeContextRequest, correlato
 
 	if informationModel == "NGSI-LD" {
 		req.Header.Add("Destination", "NGSI-LD")
+		if strings.TrimSpace(ngsiLDDelivery) != "" {
+			req.Header.Add("NGSI-LD-Delivery", strings.TrimSpace(ngsiLDDelivery))
+		}
+		if strings.TrimSpace(ngsiLDNotificationPath) != "" {
+			req.Header.Add("NGSI-LD-Notification-Path", strings.TrimSpace(ngsiLDNotificationPath))
+		}
 	}
 
 	client := nc.SecurityCfg.GetHTTPClient()

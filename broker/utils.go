@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"reflect"
@@ -13,16 +14,19 @@ import (
 	. "fogflow/common/ngsi"
 )
 
-func postNotifyContext(ctxElems []ContextElement, subscriptionId string, URL string, ConsumerNGSIVersion string, tenant string, httpsCfg *HTTPS) error {
+func postNotifyContext(ctxElems []ContextElement, subscriptionId string, URL string, ConsumerNGSIVersion string, tenant string, httpsCfg *HTTPS, ngsiLDDelivery string, ngsiLDNotificationPath string) error {
 	//INFO.Println("destination protocol: ", DestinationBrokerType)
 	// INFO.Println("ctxElems: ", ctxElems)
 
 	if LoggerIsEnabled(DEBUG) {
-		DEBUG.Println("NotifyContext ctxElems: ", ctxElems, " subscriptionId: ", subscriptionId, " URL: ", URL, " ConsumerNGSIVersion: ", ConsumerNGSIVersion, " tenant: ", tenant)
+		DEBUG.Println("NotifyContext ctxElems: ", ctxElems, " subscriptionId: ", subscriptionId, " URL: ", URL, " ConsumerNGSIVersion: ", ConsumerNGSIVersion, " tenant: ", tenant, " ngsiLDDelivery: ", ngsiLDDelivery, " ngsiLDNotificationPath: ", ngsiLDNotificationPath)
 	}
 
 	switch ConsumerNGSIVersion {
 	case "NGSI-LD":
+		if strings.EqualFold(strings.TrimSpace(ngsiLDDelivery), "notification") {
+			return postNGSILDNotification(ctxElems, subscriptionId, URL, tenant, ngsiLDNotificationPath)
+		}
 		return postNGSILDUpsert(ctxElems, URL, tenant)
 	case "NGSIv2":
 		return postNGSIV2NotifyContext(ctxElems, subscriptionId, URL, tenant)
@@ -236,6 +240,75 @@ func postNGSILDUpsert(ctxElems []ContextElement, URL string, tenant string) erro
 		DEBUG.Println("NGSI-LD resp: ", resp)
 	}
 
+	return nil
+}
+
+func ngsiLDNotifyCallbackURL(reference string, notificationPath string) string {
+	base := strings.TrimRight(reference, "/")
+	path := strings.TrimSpace(notificationPath)
+	if path == "" {
+		return base + "/ngsi-ld/v1/notifyContext"
+	}
+	return base + "/" + strings.TrimLeft(path, "/")
+}
+
+func postNGSILDNotification(ctxElems []ContextElement, subscriptionId string, reference string, tenant string, notificationPath string) error {
+	targetURL := ngsiLDNotifyCallbackURL(reference, notificationPath)
+	if LoggerIsEnabled(DEBUG) {
+		DEBUG.Println("NGSI-LD notification POST: ", targetURL, ctxElems)
+	}
+
+	data := toNGSILDPayload(ctxElems, false)
+	payload := map[string]interface{}{
+		"subscriptionId": subscriptionId,
+		"data":           data,
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	if LoggerIsEnabled(DEBUG) {
+		DEBUG.Println("NGSI-LD notification body: ", string(body))
+	}
+
+	req, _ := http.NewRequest("POST", targetURL, bytes.NewBuffer(body))
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("NGSILD-Tenant", tenant)
+	req.Header.Add("Link", "<https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.3.jsonld>; rel=\"http://www.w3.org/ns/json-ld#context\"; type=\"application/ld+json\"")
+
+	client := &http.Client{}
+	if strings.HasPrefix(targetURL, "https") {
+		transCfg := &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+		client = &http.Client{Transport: transCfg}
+	}
+
+	resp, err := client.Do(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	if err != nil {
+		ERROR.Println(err)
+		return err
+	}
+	if resp.StatusCode >= 300 {
+		responseBody, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			INFO.Println("Error reading response body:", readErr)
+		}
+		ERROR.Println(
+			"NGSI-LD notification failed\nStatus Code:", resp.StatusCode,
+			"\nDestination URL:", req.URL.String(),
+			"\nRequest Body:", string(body),
+			"\nResponse Body: ", string(responseBody))
+		return fmt.Errorf("NGSI-LD notification HTTP %d", resp.StatusCode)
+	}
+	if LoggerIsEnabled(DEBUG) {
+		DEBUG.Println("NGSI-LD notification resp: ", resp.Status)
+	}
 	return nil
 }
 

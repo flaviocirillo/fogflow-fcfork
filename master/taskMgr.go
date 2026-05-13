@@ -59,6 +59,8 @@ type InputEntity struct {
 	Location         Point
 	InformationModel string
 	ProvisionMethod  string
+	NGSILDDelivery         string
+	NGSILDNotificationPath string
 }
 
 type InputSubscription struct {
@@ -305,6 +307,8 @@ func (flow *FogFlow) expandExecutionPlan(entityID string, inputSubscription *Inp
 					inputEntity.AttributeList = inputSubscription.InputSelector.SelectedAttributes
 					inputEntity.InformationModel = inputSubscription.InputSelector.InformationModel
 					inputEntity.ProvisionMethod = inputSubscription.InputSelector.ProvisionMethod
+					inputEntity.NGSILDDelivery = inputSubscription.InputSelector.NGSILDDelivery
+					inputEntity.NGSILDNotificationPath = inputSubscription.InputSelector.NGSILDNotificationPath
 
 					task.Inputs = append(task.Inputs, inputEntity)
 					if LoggerIsEnabled(DEBUG) {
@@ -319,6 +323,8 @@ func (flow *FogFlow) expandExecutionPlan(entityID string, inputSubscription *Inp
 					flowInfo.InputStream.AttributeList = inputEntity.AttributeList
 					flowInfo.InputStream.InformationModel = inputEntity.InformationModel
 					flowInfo.InputStream.ProvisionMethod = inputEntity.ProvisionMethod
+					flowInfo.InputStream.NGSILDDelivery = inputEntity.NGSILDDelivery
+					flowInfo.InputStream.NGSILDNotificationPath = inputEntity.NGSILDNotificationPath
 
 					flowInfo.TaskInstanceID = task.TaskID
 					flowInfo.WorkerID = flow.DeploymentPlan[task.TaskID].WorkerID
@@ -435,6 +441,8 @@ func (flow *FogFlow) addNewTask(task *TaskConfig) *DeploymentAction {
 		instream.AttributeList = inputEntity.AttributeList
 		instream.InformationModel = inputEntity.InformationModel
 		instream.ProvisionMethod = inputEntity.ProvisionMethod
+		instream.NGSILDDelivery = inputEntity.NGSILDDelivery
+		instream.NGSILDNotificationPath = inputEntity.NGSILDNotificationPath
 
 		taskInstance.Inputs = append(taskInstance.Inputs, instream)
 	}
@@ -739,6 +747,8 @@ func (flow *FogFlow) searchRelevantEntities(group *GroupInfo, updatedEntityID st
 
 				inputEntity.InformationModel = selector.InformationModel
 				inputEntity.ProvisionMethod = selector.ProvisionMethod
+				inputEntity.NGSILDDelivery = selector.NGSILDDelivery
+				inputEntity.NGSILDNotificationPath = selector.NGSILDNotificationPath
 
 				if LoggerIsEnabled(DEBUG) {
 					DEBUG.Println("[inputEntity]: ", inputEntity)
@@ -898,6 +908,9 @@ func (tMgr *TaskMgr) handleASynchronousTaskIntent(taskIntent *TaskIntent) {
 		tMgr.subID2FogFunc_lock.Lock()
 		tMgr.subID2FogFunc[subID] = fID
 		tMgr.subID2FogFunc_lock.Unlock()
+		if LoggerIsEnabled(DEBUG) {
+			DEBUG.Printf("matched subscription id %s with fog function id %s\r\n", subID, fID)
+		}
 	}
 
 	// add this fog function into the function map

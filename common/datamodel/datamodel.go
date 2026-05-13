@@ -117,6 +117,10 @@ type InputStreamConfig struct {
 	Scoped                  bool     `json:"scoped"`
 	InformationModel        string   `json:"information_model"`
 	ProvisionMethod         string   `json:"provisionmethod"`
+	// NGSILDDelivery: when InformationModel is NGSI-LD, "upsert" (default) pushes entityOperations/upsert;
+	// "notification" POSTs an NGSI-LD notification payload to notification_path under reference.
+	NGSILDDelivery         string `json:"ngsi_ld_delivery,omitempty"`
+	NGSILDNotificationPath string `json:"notification_path,omitempty"`
 }
 
 // This is to state that we do not need to save all registrations if the subscription is simply by type
@@ -270,10 +274,15 @@ type InputStream struct {
 	AttributeList    []string
 	InformationModel string
 	ProvisionMethod  string
+	NGSILDDelivery         string
+	NGSILDNotificationPath string
 }
 
 func (myInputStream *InputStream) Equal(otherInputStream *InputStream) bool {
-	if myInputStream.Type == otherInputStream.Type && myInputStream.ID == otherInputStream.ID {
+	if myInputStream.Type == otherInputStream.Type && myInputStream.ID == otherInputStream.ID &&
+		myInputStream.InformationModel == otherInputStream.InformationModel &&
+		myInputStream.NGSILDDelivery == otherInputStream.NGSILDDelivery &&
+		myInputStream.NGSILDNotificationPath == otherInputStream.NGSILDNotificationPath {
 		return true
 	} else {
 		return false

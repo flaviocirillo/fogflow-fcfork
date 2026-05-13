@@ -5,6 +5,7 @@ COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
 
 ENV_FILE="${1:-fogflow.config}"
 GENERATED_ENV=".env.generated"
+GENERATED_COMPOSE_FILE=".docker-compose.generated.yml"
 
 if [ -f "$ENV_FILE" ]; then
   set -a
@@ -14,6 +15,17 @@ fi
 
 detect_host_ip() {
   ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}'
+}
+
+is_enabled() {
+  case "${1:-}" in
+    true|TRUE|True|1|yes|YES|Yes|y|Y)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 HOST_IP="${HOST_IP:-$(detect_host_ip)}"
@@ -72,6 +84,7 @@ DESIGNER_WEB_PORT="${DESIGNER_WEB_PORT:-8080}"
 DESIGNER_AGENT_PORT="${DESIGNER_AGENT_PORT:-1030}"
 DESIGNER_LD_AGENT_PORT="${DESIGNER_LD_AGENT_PORT:-1090}"
 DESIGNER_DO_NOT_INIT_APPLICATIONS="${DESIGNER_DO_NOT_INIT_APPLICATIONS:-true}"
+DESIGNER_STORE_ON_DISK="${DESIGNER_STORE_ON_DISK:-false}"
 DESIGNER_DB_DIR="${DESIGNER_DB_DIR:-/tmp/fogflow/designerDB}"
 
 RABBITMQ_PORT="${RABBITMQ_PORT:-5672}"
@@ -86,6 +99,39 @@ NGINX_SERVER_NAME="${NGINX_SERVER_NAME:-_}"
 
 AIRFLOW_DAGS="${AIRFLOW_DAGS:-/tmp/fogflow/airflow/dags}"
 PYMODULE_REPO="${PYMODULE_REPO:-/tmp/fogflow/pymodules}"
+
+generate_compose_file() {
+  python3 - "$COMPOSE_FILE" "$GENERATED_COMPOSE_FILE" "$DESIGNER_STORE_ON_DISK" "$DISCOVERY_STORE_ON_DISK" <<'PY'
+from pathlib import Path
+import sys
+
+source_path = Path(sys.argv[1])
+target_path = Path(sys.argv[2])
+designer_store_on_disk = sys.argv[3].lower() in {"true", "1", "yes", "y"}
+discovery_store_on_disk = sys.argv[4].lower() in {"true", "1", "yes", "y"}
+
+service_name = None
+output_lines = []
+
+for line in source_path.read_text().splitlines():
+    stripped = line.strip()
+
+    if line.startswith("  ") and not line.startswith("    ") and stripped.endswith(":"):
+        service_name = stripped[:-1]
+
+    if service_name == "designer" and stripped == "- ${DESIGNER_DB_DIR}:/app/public/data/meta" and not designer_store_on_disk:
+        output_lines.append("      # - ${DESIGNER_DB_DIR}:/app/public/data/meta")
+        continue
+
+    if service_name == "discovery" and stripped == "- ${DISCOVERY_DB_DIR}:/discoveryDB" and not discovery_store_on_disk:
+        output_lines.append("      # - ${DISCOVERY_DB_DIR}:/discoveryDB")
+        continue
+
+    output_lines.append(line)
+
+target_path.write_text("\n".join(output_lines) + "\n")
+PY
+}
 
 cat > .config.json <<EOF
 {
@@ -217,10 +263,12 @@ if [ "$FOGFLOW_MODE" = "full" ]; then
   echo "  Web UI:        http://localhost:${DESIGNER_WEB_PORT}"
   echo "  Agent Port:    ${DESIGNER_AGENT_PORT}"
   echo "  LD Agent Port: ${DESIGNER_LD_AGENT_PORT}"
+  echo "  Store on disk: ${DESIGNER_STORE_ON_DISK}"
   echo ""
 
   echo "🔎 DISCOVERY"
   echo "  HTTP Port:     ${DISCOVERY_PORT}"
+  echo "  Store on disk: ${DISCOVERY_STORE_ON_DISK}"
   echo ""
 
   echo "🧠 MASTER"
@@ -277,8 +325,12 @@ fi
 case "$FOGFLOW_MODE" in
   full)
     PROFILE="full"
-    mkdir -p "$DISCOVERY_DB_DIR"
-    mkdir -p "$DESIGNER_DB_DIR"
+    if is_enabled "$DISCOVERY_STORE_ON_DISK"; then
+      mkdir -p "$DISCOVERY_DB_DIR"
+    fi
+    if is_enabled "$DESIGNER_STORE_ON_DISK"; then
+      mkdir -p "$DESIGNER_DB_DIR"
+    fi
     ;;
   edge)
     PROFILE="edge"
@@ -290,16 +342,18 @@ case "$FOGFLOW_MODE" in
     ;;
 esac
 
+generate_compose_file
+
 case "$FOGFLOW_DAEMON" in
   true|1|yes|y)
-    docker compose -f "$COMPOSE_FILE" \
+    docker compose -f "$GENERATED_COMPOSE_FILE" \
       --env-file "$GENERATED_ENV" \
       --profile "$PROFILE" \
       --profile "$WORKER_PROFILE" \
       up -d
     ;;
   false|0|no|n)
-    docker compose -f "$COMPOSE_FILE" \
+    docker compose -f "$GENERATED_COMPOSE_FILE" \
       --env-file "$GENERATED_ENV" \
       --profile "$PROFILE" \
       --profile "$WORKER_PROFILE" \

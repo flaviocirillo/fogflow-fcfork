@@ -1017,6 +1017,9 @@ type Subscriber struct {
 	DestinationType    string
 	Tenant             string
 	Correlator         string
+	// When DestinationType is NGSI-LD: NGSILDDelivery "notification" sends NGSI-LD notify payload; empty/other uses upsert.
+	NGSILDDelivery         string
+	NGSILDNotificationPath string
 }
 
 type SubscribeContextRequest struct {

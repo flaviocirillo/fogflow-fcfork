@@ -14,6 +14,18 @@ function registerAllBlocks(blocks, operators, dtypes) {
                 attrs: "editable"
             },
             {
+                name: "NgsiLdDelivery",
+                choices: ["upsert", "notification"],
+                defaultValue: "upsert",
+                attrs: "editable"
+            },
+            {
+                name: "NotificationPath",
+                type: "string",
+                defaultValue: "",
+                attrs: "editable"
+            },
+            {
                 name: "ProvisionMethod",
                 choices: ["Pub-Sub", "Batch", "None"],
                 defaultValue: "Pub-Sub",

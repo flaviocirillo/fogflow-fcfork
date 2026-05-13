@@ -72,7 +72,6 @@
 
 # Discovery database folder on host
 # Used only when DISCOVERY_STORE_ON_DISK=true.
-# Still mounted always because Docker Compose does not support conditional mounts.
 # Default: /tmp/fogflow/discoveryDB
 # DISCOVERY_DB_DIR=/tmp/fogflow/discoveryDB
 
@@ -164,9 +163,12 @@
 # Default: true
 # DESIGNER_DO_NOT_INIT_APPLICATIONS=true
 
+# Persist designer metadata on disk
+# Default: false
+# DESIGNER_STORE_ON_DISK=false
+
 # Designer metadata database folder on host
-# Used for persisting designer metadata.
-# Mounted always because Docker Compose does not support conditional mounts.
+# Used only when DESIGNER_STORE_ON_DISK=true.
 # Default: /tmp/fogflow/designerDB
 # DESIGNER_DB_DIR=/tmp/fogflow/designerDB
 
