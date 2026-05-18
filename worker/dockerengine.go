@@ -130,6 +130,18 @@ func (dockerengine *DockerEngine) findFreePortNumber() int {
 	return l.Addr().(*net.TCPAddr).Port
 }
 
+const maxPortBindRetries = 10
+
+func isPortBindError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "address already in use") ||
+		strings.Contains(msg, "failed to bind port") ||
+		strings.Contains(msg, "external connectivity")
+}
+
 // functionCode string, taskID string, adminCfg []interface{}, servicePorts []string)
 func (dockerengine *DockerEngine) StartTask(task *ScheduledTaskInstance, brokerURL string, commands []interface{}) (string, string, error) {
 	dockerImage := task.DockerImage
@@ -149,28 +161,9 @@ func (dockerengine *DockerEngine) StartTask(task *ScheduledTaskInstance, brokerU
 	// function code
 	functionCode := task.FunctionCode
 
-	// find a free listening port number available on the host machine
-	freePort := strconv.Itoa(dockerengine.findFreePortNumber())
-
-	// // configure the task with its output streams via its admin interface
-	// commands := make([]interface{}, 0)
-
-	// // set broker URL
-	// setBrokerCmd := make(map[string]interface{})
-	// setBrokerCmd["command"] = "CONNECT_BROKER"
-	// setBrokerCmd["brokerURL"] = brokerURL
-	// commands = append(commands, setBrokerCmd)
-
-	// // set CorrelatorID
-	// setCorrelatorCmd := make(map[string]interface{})
-	// setCorrelatorCmd["command"] = "SET_CORRELATORID"
-	// setCorrelatorCmd["correlatorID"] = task.ID
-	// commands = append(commands, setCorrelatorCmd)
-
 	// pass the reference URL to the task so that the task can issue context subscription as well
 	setReferenceCmd := make(map[string]interface{})
 	setReferenceCmd["command"] = "SET_REFERENCE"
-	setReferenceCmd["url"] = "http://" + dockerengine.workerCfg.InternalIP + ":" + freePort
 	commands = append(commands, setReferenceCmd)
 
 	// // set output stream
@@ -226,31 +219,6 @@ func (dockerengine *DockerEngine) StartTask(task *ScheduledTaskInstance, brokerU
 
 	}
 
-	// prepare the configuration for a docker container, host mode for the container network
-	evs := make([]string, 0)
-	evs = append(evs, fmt.Sprintf("myport=%s", freePort))
-
-	// pass the initial configuration as the environmental variable
-	jsonString, _ := json.Marshal(commands)
-	evs = append(evs, fmt.Sprintf("adminCfg=%s", jsonString))
-
-	config := docker.Config{Image: dockerImage, Env: evs}
-
-	//if runtime.GOOS == "darwin" {   already use the bridge model
-	internalPort := docker.Port(freePort + "/tcp")
-	portBindings := map[docker.Port][]docker.PortBinding{
-		internalPort: []docker.PortBinding{docker.PortBinding{HostIP: "0.0.0.0", HostPort: freePort}}}
-
-	config.ExposedPorts = map[docker.Port]struct{}{internalPort: {}}
-
-	// add the other listening ports into the exposed port list
-	for _, port := range servicePorts {
-		internalPort := docker.Port(port + "/tcp")
-		portBindings[internalPort] = []docker.PortBinding{docker.PortBinding{HostIP: "0.0.0.0", HostPort: port}}
-	}
-
-	hostConfig.PortBindings = portBindings
-
 	// to configure if the container will be removed once it is terminated
 	hostConfig.AutoRemove = dockerengine.workerCfg.Worker.ContainerAutoRemove
 
@@ -272,26 +240,71 @@ func (dockerengine *DockerEngine) StartTask(task *ScheduledTaskInstance, brokerU
 		hostConfig.Mounts = append(hostConfig.Mounts, mount)
 	}
 
-	containerOptions := docker.CreateContainerOptions{Config: &config,
-		HostConfig: &hostConfig}
+	var lastErr error
+	for attempt := 0; attempt < maxPortBindRetries; attempt++ {
+		freePort := strconv.Itoa(dockerengine.findFreePortNumber())
+		setReferenceCmd["url"] = "http://" + dockerengine.workerCfg.InternalIP + ":" + freePort
 
-	// create a new docker container
-	container, err := dockerengine.client.CreateContainer(containerOptions)
-	if err != nil {
-		ERROR.Println(err)
-		return "", freePort, err
+		// prepare the configuration for a docker container, host mode for the container network
+		evs := make([]string, 0)
+		evs = append(evs, fmt.Sprintf("myport=%s", freePort))
+
+		// pass the initial configuration as the environmental variable
+		jsonString, _ := json.Marshal(commands)
+		evs = append(evs, fmt.Sprintf("adminCfg=%s", jsonString))
+
+		config := docker.Config{Image: dockerImage, Env: evs}
+
+		//if runtime.GOOS == "darwin" {   already use the bridge model
+		internalPort := docker.Port(freePort + "/tcp")
+		portBindings := map[docker.Port][]docker.PortBinding{
+			internalPort: []docker.PortBinding{docker.PortBinding{HostIP: "0.0.0.0", HostPort: freePort}}}
+
+		config.ExposedPorts = map[docker.Port]struct{}{internalPort: {}}
+
+		// add the other listening ports into the exposed port list
+		for _, port := range servicePorts {
+			internalPort := docker.Port(port + "/tcp")
+			portBindings[internalPort] = []docker.PortBinding{docker.PortBinding{HostIP: "0.0.0.0", HostPort: port}}
+		}
+
+		hostConfig.PortBindings = portBindings
+
+		containerOptions := docker.CreateContainerOptions{Config: &config,
+			HostConfig: &hostConfig}
+
+		// create a new docker container
+		container, err := dockerengine.client.CreateContainer(containerOptions)
+		if err != nil {
+			lastErr = err
+			if isPortBindError(err) {
+				INFO.Printf("port %s in use when creating container for task %s, retrying (%d/%d)\n",
+					freePort, task.ID, attempt+1, maxPortBindRetries)
+				continue
+			}
+			ERROR.Println(err)
+			return "", freePort, err
+		}
+
+		// start the new container
+		err = dockerengine.client.StartContainer(container.ID, &hostConfig)
+		if err != nil {
+			lastErr = err
+			_ = dockerengine.client.RemoveContainer(docker.RemoveContainerOptions{ID: container.ID, Force: true})
+			if isPortBindError(err) {
+				INFO.Printf("port %s in use when starting container for task %s, retrying (%d/%d)\n",
+					freePort, task.ID, attempt+1, maxPortBindRetries)
+				continue
+			}
+			ERROR.Println(err)
+			return "", freePort, err
+		}
+
+		refURL := "http://" + dockerengine.workerCfg.InternalIP + ":" + freePort
+		return container.ID, refURL, nil
 	}
 
-	// start the new container
-	err = dockerengine.client.StartContainer(container.ID, &hostConfig)
-	if err != nil {
-		ERROR.Println(err)
-		return "", freePort, err
-	}
-
-	refURL := "http://" + dockerengine.workerCfg.InternalIP + ":" + freePort
-
-	return container.ID, refURL, nil
+	return "", "", fmt.Errorf("failed to bind a host port after %d attempts: %v", maxPortBindRetries, lastErr)
 }
 
 func (dockerengine *DockerEngine) StopTask(containerID string) {
