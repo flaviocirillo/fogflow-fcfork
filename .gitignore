@@ -25,3 +25,6 @@ release/latest/.config.json
 release/latest/.env.generated
 release/latest/.nginx.conf
 release/latest/fogflow.config
+designer/public/data/meta/
+discovery/discovery
+master/master

@@ -1,79 +1,196 @@
 const amqplib = require('amqplib');
 
-var amqp_url = null;
-var amqpConn = null;
-var amqpChannel = null;
-var msgHandler = null;
-
 const exchange_name = 'fogflow';
 const exchange_type = 'topic';
 const queue_name = 'fogflow-designer';
 const subscribed_keys = ['designer.*', 'task.'];
-
 const TIME_INTERVAL_RECONNECT = 5000;
 
-var cb_after_connected = null;
+let amqp_url = null;
+let amqpConn = null;
+let amqpChannel = null;
+let msgHandler = null;
+let cb_after_connected = null;
 
-function Init(rabbitmqURL, fnConsumer, afterConnected) 
-{
-    console.log("[RabbitMQ] connecting to ", rabbitmqURL);    
+let isReady = false;
+let isConnecting = false;
+let reconnectTimer = null;
+let hasCalledAfterConnected = false;
+const pendingMessages = [];
+
+function Init(rabbitmqURL, fnConsumer, afterConnected) {
     amqp_url = rabbitmqURL;
-    msgHandler = fnConsumer
-	cb_after_connected = afterConnected;
-    
-    amqplib.connect(amqp_url).then(function(conn) {       
-        console.log("[RabbitMQ] connected");
-        amqpConn = conn;
-        
-        whenConnected();
-    }).catch( function(err) {
-        console.error("[RabbitMQ]", err.message);
-        return setTimeout(reConnect, TIME_INTERVAL_RECONNECT);
-    });
+    msgHandler = fnConsumer;
+    cb_after_connected = afterConnected;
+    connect();
 }
 
-function reConnect() {
-    console.log("[RabbitMQ] reconnecting to ", amqp_url);    
-	
-    amqplib.connect(amqp_url).then(function(conn) {       
-        console.log("[RabbitMQ] connected");
-        amqpConn = conn;
-        
-        whenConnected();
-    }).catch( function(err) {
-        console.error("[RabbitMQ]", err.message);
-        return setTimeout(reConnect, TIME_INTERVAL_RECONNECT);
-    });
-}
-
-async function whenConnected() {
-    amqpChannel = await amqpConn.createChannel()
-
-    //create the exchange 
-    await amqpChannel.assertExchange(exchange_name, exchange_type, {durable: true, autoDelete: true}).catch(console.error);       
-    
-    //start the consumer
-    await amqpChannel.assertQueue(queue_name, {durable: true});
-    
-    for(var i=0; i<subscribed_keys.length; i++){
-        var key = subscribed_keys[i];
-        console.log("[RabbitMQ] subscribed to ", key);
-        await amqpChannel.bindQueue(queue_name, exchange_name, key);           
+function scheduleReconnect() {
+    if (reconnectTimer) {
+        return;
     }
-    
-    await amqpChannel.consume(queue_name, processMsg, { noAck: true });        
-	
-	cb_after_connected();
+    reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connect();
+    }, TIME_INTERVAL_RECONNECT);
+}
+
+function onDisconnected(reason) {
+    if (!isReady && !amqpConn && !amqpChannel) {
+        scheduleReconnect();
+        return;
+    }
+
+    console.error('[RabbitMQ] disconnected:', reason || 'unknown');
+    isReady = false;
+    isConnecting = false;
+    amqpChannel = null;
+
+    if (amqpConn) {
+        try {
+            amqpConn.removeAllListeners();
+        } catch (_) { /* ignore */ }
+        amqpConn = null;
+    }
+
+    scheduleReconnect();
+}
+
+async function connect() {
+    if (isConnecting) {
+        return;
+    }
+    isConnecting = true;
+    console.log('[RabbitMQ] connecting to', amqp_url);
+
+    try {
+        const conn = await amqplib.connect(amqp_url);
+        amqpConn = conn;
+
+        conn.on('error', (err) => {
+            console.error('[RabbitMQ] connection error:', err.message);
+        });
+        conn.on('close', () => {
+            onDisconnected('connection closed');
+        });
+
+        const channel = await conn.createChannel();
+        amqpChannel = channel;
+
+        channel.on('error', (err) => {
+            console.error('[RabbitMQ] channel error:', err.message);
+        });
+        channel.on('close', () => {
+            if (isReady) {
+                onDisconnected('channel closed');
+            }
+        });
+
+        await channel.assertExchange(exchange_name, exchange_type, {
+            durable: true,
+            autoDelete: true,
+        });
+        await channel.assertQueue(queue_name, { durable: true });
+
+        for (let i = 0; i < subscribed_keys.length; i++) {
+            const key = subscribed_keys[i];
+            console.log('[RabbitMQ] subscribed to', key);
+            await channel.bindQueue(queue_name, exchange_name, key);
+        }
+
+        await channel.consume(queue_name, processMsg, { noAck: true });
+
+        isReady = true;
+        isConnecting = false;
+        console.log('[RabbitMQ] connected');
+
+        if (!hasCalledAfterConnected && cb_after_connected) {
+            hasCalledAfterConnected = true;
+            cb_after_connected();
+        }
+
+        await flushPendingMessages();
+    } catch (err) {
+        isConnecting = false;
+        console.error('[RabbitMQ]', err.message);
+        amqpChannel = null;
+        if (amqpConn) {
+            try {
+                amqpConn.removeAllListeners();
+            } catch (_) { /* ignore */ }
+            amqpConn = null;
+        }
+        scheduleReconnect();
+    }
 }
 
 function processMsg(msg) {
-    var jsonMsg = JSON.parse(msg.content)
+    const jsonMsg = JSON.parse(msg.content);
     msgHandler(jsonMsg);
 }
 
-async function Publish(msg){
-    var msgContent = JSON.stringify(msg);
-    await amqpChannel.publish(exchange_name, msg.RoutingKey, Buffer.from(msgContent));
+async function publishNow(msg) {
+    if (!isReady || !amqpChannel) {
+        throw new Error('channel not ready');
+    }
+
+    const msgContent = JSON.stringify(msg);
+    const ok = amqpChannel.publish(
+        exchange_name,
+        msg.RoutingKey,
+        Buffer.from(msgContent),
+        { contentType: 'application/json', persistent: true }
+    );
+
+    if (!ok) {
+        await new Promise((resolve) => amqpChannel.once('drain', resolve));
+    }
 }
 
-module.exports = { Init, Publish }
+async function flushPendingMessages() {
+    while (pendingMessages.length > 0 && isReady && amqpChannel) {
+        const item = pendingMessages[0];
+        try {
+            await publishNow(item.msg);
+            pendingMessages.shift();
+            item.resolve();
+        } catch (err) {
+            console.error('[RabbitMQ] failed to publish queued message:', err.message);
+            if (!isReady || !amqpChannel) {
+                break;
+            }
+            pendingMessages.shift();
+            item.reject(err);
+        }
+    }
+}
+
+function Publish(msg) {
+    return new Promise((resolve, reject) => {
+        const item = { msg, resolve, reject };
+
+        if (isReady && amqpChannel) {
+            publishNow(msg)
+                .then(resolve)
+                .catch((err) => {
+                    console.error('[RabbitMQ] publish failed, re-queuing:', err.message);
+                    pendingMessages.push(item);
+                    onDisconnected(err.message);
+                });
+            return;
+        }
+
+        console.log(
+            '[RabbitMQ] channel not ready, queuing message (pending:',
+            pendingMessages.length + 1,
+            ')'
+        );
+        pendingMessages.push(item);
+
+        if (!isConnecting && !reconnectTimer) {
+            connect();
+        }
+    });
+}
+
+module.exports = { Init, Publish };

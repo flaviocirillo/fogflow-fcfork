@@ -7,6 +7,11 @@ FogFlow
   :target: https://stackoverflow.com/questions/tagged/fiware/
 
 
+FogFlow is a data analytics orchestration framework specifically designed for Digital Twins. The main functionalities of FogFlow are:
+- Edge-Cloud continuum: FogFlow can be fully 
+- Stream and Batch processing:
+- Dynamic data processing configuration depending on context:
+
 FogFlow is an IoT edge computing framework that automatically orchestrates dynamic data processing flows over cloud and edges 
 based on various **context**, including:
 

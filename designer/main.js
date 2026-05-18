@@ -961,8 +961,10 @@ function publishMetadata(dType, dObject) {
         PayLoad: dObject
     };
 
-    rabbitmq.Publish(jsonMsg);
     console.log("Publishing metadata: ", JSON.stringify(jsonMsg));
+    rabbitmq.Publish(jsonMsg).catch(function (err) {
+        console.error("Failed to publish metadata:", err.message);
+    });
 }
 
 
