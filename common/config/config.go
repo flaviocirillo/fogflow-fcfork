@@ -30,6 +30,13 @@ type RegistryConfiguration struct {
 	ServerAddress string `json:"serveraddress,omitempty"`
 }
 
+// DockerVolumeMount describes a named Docker volume to mount into task containers.
+type DockerVolumeMount struct {
+	Name     string `json:"name"`
+	Path     string `json:"path"`
+	ReadOnly bool   `json:"read_only,omitempty"`
+}
+
 func (r *RegistryConfiguration) IsConfigured() bool {
 	if r.Username != "" && r.Password != "" && r.Email != "" && r.ServerAddress != "" {
 		return true
@@ -86,6 +93,10 @@ type Config struct {
 		HeartbeatInterval         int                   `json:"heartbeat_interval"`
 		DetectionDuration         int                   `json:"detection_duration"`
 		InfiniteReconnectionTries bool                  `json:"infinite_reconnection_tries"`
+		// DockerVolumes are mounted into every task container started by this worker.
+		// Operator parameters named "docker_volume" / "docker-volume" add more mounts;
+		// if an operator mount uses the same container path, it overrides the default.
+		DockerVolumes []DockerVolumeMount `json:"docker_volumes,omitempty"`
 	} `json:"worker"`
 	RabbitMQ struct {
 		HostIP   string `json:"host_ip"`

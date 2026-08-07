@@ -31,7 +31,7 @@ blocks.register({
         {
             name: "Name",
             type: "string",
-            choices: ["service-port", "virtual-network-interface"],            
+            choices: ["service-port", "virtual-network-interface", "docker_volume"],            
             attrs: "editable"
         },{
             name: "Value",

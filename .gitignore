@@ -28,3 +28,5 @@ release/latest/fogflow.config
 designer/public/data/meta/
 discovery/discovery
 master/master
+cli/python/__pycache__
+release/latest-flavio/

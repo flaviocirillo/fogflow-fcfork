@@ -180,6 +180,22 @@ func (dockerengine *DockerEngine) StartTask(task *ScheduledTaskInstance, brokerU
 	// check if it is required to set up the portmapping for its endpoint services
 	servicePorts := make([]string, 0)
 
+	// mountsByTarget collects volume/bind mounts keyed by container path.
+	// Worker defaults are applied first; operator docker_volume params add more,
+	// overriding the default when the container path matches.
+	mountsByTarget := make(map[string]docker.HostMount)
+	for _, vol := range dockerengine.workerCfg.Worker.DockerVolumes {
+		if vol.Name == "" || vol.Path == "" {
+			continue
+		}
+		mountsByTarget[vol.Path] = docker.HostMount{
+			Type:     "volume",
+			Source:   vol.Name,
+			Target:   vol.Path,
+			ReadOnly: vol.ReadOnly,
+		}
+	}
+
 	for _, parameter := range task.Parameters {
 		// deal with the service port
 		if parameter.Name == "service_port" {
@@ -211,6 +227,14 @@ func (dockerengine *DockerEngine) StartTask(task *ScheduledTaskInstance, brokerU
 			// DEBUG.Printf("hostConfig: %v", hostConfig)
 		}
 
+		if parameter.Name == "docker_volume" || parameter.Name == "docker-volume" {
+			if mount, ok := parseDockerVolumeParameter(parameter); ok {
+				mountsByTarget[mount.Target] = mount
+			} else {
+				ERROR.Printf("invalid docker_volume parameter for task %s: %v\n", task.ID, parameter.Value)
+			}
+		}
+
 		// // If notthing of the above let pass it as it is
 		// setParameterCmd := make(map[string]interface{})
 		// setParameterCmd["name"] = parameter.Name
@@ -236,8 +260,21 @@ func (dockerengine *DockerEngine) StartTask(task *ScheduledTaskInstance, brokerU
 			DEBUG.Println("mounting configuration ", mount)
 		}
 
-		hostConfig.Mounts = make([]docker.HostMount, 0)
-		hostConfig.Mounts = append(hostConfig.Mounts, mount)
+		mountsByTarget[mount.Target] = mount
+	}
+
+	if len(mountsByTarget) > 0 {
+		hostConfig.Mounts = make([]docker.HostMount, 0, len(mountsByTarget))
+		for _, mount := range mountsByTarget {
+			if mount.Type == "volume" {
+				dockerengine.ensureVolume(mount.Source)
+			}
+			hostConfig.Mounts = append(hostConfig.Mounts, mount)
+			if LoggerIsEnabled(DEBUG) {
+				DEBUG.Printf("container mount: type=%s source=%s target=%s readonly=%v\n",
+					mount.Type, mount.Source, mount.Target, mount.ReadOnly)
+			}
+		}
 	}
 
 	var lastErr error
@@ -309,6 +346,60 @@ func (dockerengine *DockerEngine) StartTask(task *ScheduledTaskInstance, brokerU
 
 func (dockerengine *DockerEngine) StopTask(containerID string) {
 	go dockerengine.client.StopContainer(containerID, 1)
+}
+
+// ensureVolume creates a named Docker volume if it does not already exist.
+func (dockerengine *DockerEngine) ensureVolume(name string) {
+	if name == "" || dockerengine.client == nil {
+		return
+	}
+	_, err := dockerengine.client.CreateVolume(docker.CreateVolumeOptions{Name: name})
+	if err != nil {
+		// Already exists (or other non-fatal conditions): Docker will still use it on mount.
+		if LoggerIsEnabled(DEBUG) {
+			DEBUG.Printf("ensureVolume(%s): %v\n", name, err)
+		}
+	}
+}
+
+// parseDockerVolumeParameter parses an operator parameter into a volume mount.
+// Accepted string form: "<volumeName>:<containerPath>[:ro|rw]"
+// Accepted map form: {"name": "...", "path": "...", "read_only": "true"|"false"}
+func parseDockerVolumeParameter(parameter Parameter) (docker.HostMount, bool) {
+	if spec, ok := parameter.Value.AsString(); ok {
+		return parseDockerVolumeSpec(spec)
+	}
+	if m, ok := parameter.Value.AsMap(); ok {
+		name := m["name"]
+		path := m["path"]
+		if name == "" || path == "" {
+			return docker.HostMount{}, false
+		}
+		readOnly := strings.EqualFold(m["read_only"], "true") || strings.EqualFold(m["read_only"], "ro")
+		return docker.HostMount{
+			Type:     "volume",
+			Source:   name,
+			Target:   path,
+			ReadOnly: readOnly,
+		}, true
+	}
+	return docker.HostMount{}, false
+}
+
+func parseDockerVolumeSpec(spec string) (docker.HostMount, bool) {
+	parts := strings.Split(spec, ":")
+	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+		return docker.HostMount{}, false
+	}
+	mount := docker.HostMount{
+		Type:   "volume",
+		Source: parts[0],
+		Target: parts[1],
+	}
+	if len(parts) >= 3 && strings.EqualFold(parts[2], "ro") {
+		mount.ReadOnly = true
+	}
+	return mount, true
 }
 
 func (dockerengine *DockerEngine) writeTempFile(fileName string, fileContent string) {
